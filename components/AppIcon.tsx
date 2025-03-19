@@ -24,7 +24,9 @@ type IconName =
   | 'eye-off'
   | 'alert-circle'
   | 'chatbubble-ellipses'
-  | 'refresh';
+  | 'refresh'
+  | 'trash'
+  | 'arrow-up';
 
 interface AppIconProps {
   name: IconName;

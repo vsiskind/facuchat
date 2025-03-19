@@ -53,7 +53,6 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
           tabBarIcon: ({ size, color }) => (
             <AppIcon name="home" size={size} color={color} outline={true} />
           ),
@@ -62,7 +61,6 @@ export default function TabLayout() {
       <Tabs.Screen
         name="create"
         options={{
-          title: 'Post',
           tabBarIcon: ({ size, color }) => (
             <AppIcon name="add-circle" size={size + 8} color={color} outline={true} />
           ),
@@ -71,7 +69,6 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
           tabBarIcon: ({ size, color }) => (
             <AppIcon name="person" size={size} color={color} outline={true} />
           ),
