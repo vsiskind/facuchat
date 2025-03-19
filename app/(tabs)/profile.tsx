@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
 import { AppIcon } from '../../components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
+import React from 'react';
 
 const ACCENT_COLOR = '#7C3AED';
 const HEADER_BG_COLOR = '#6B21A8'; // Deeper purple for header
@@ -160,18 +161,21 @@ export default function ProfileScreen() {
 
   const handleDeletePost = async (postId: string) => {
     try {
+      setLoading(true);
       const { error } = await supabase
         .from('posts')
         .delete()
         .eq('id', postId);
 
       if (error) throw error;
-
-      // Update local state to remove the deleted post
-      setPosts(posts.filter(post => post.id !== postId));
+      
+      // Refresh the posts list after deletion
+      await fetchUserPosts();
     } catch (err: any) {
       Alert.alert('Error', 'Failed to delete post. Please try again.');
       console.error('Error deleting post:', err);
+    } finally {
+      setLoading(false);
     }
   };
 

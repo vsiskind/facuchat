@@ -14,6 +14,7 @@ import {
 import { generateRandomUsername, getRandomAvatarUrl } from '../utils/anonymous';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
+import React from 'react';
 
 const ACCENT_COLOR = '#7C3AED';
 const HEADER_BG_COLOR = '#6B21A8';

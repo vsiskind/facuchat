@@ -18,6 +18,7 @@ import { supabase } from '../../lib/supabase';
 import { AppIcon } from '../../components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
 import { generateRandomUsername, getRandomAvatarUrl } from '../utils/anonymous';
+import React from 'react';
 
 const ACCENT_COLOR = '#7C3AED';
 const HEADER_BG_COLOR = '#6B21A8';
