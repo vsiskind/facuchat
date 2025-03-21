@@ -481,6 +481,14 @@ export const profileStyles = StyleSheet.create({
     borderBottomColor: 'rgba(0,0,0,0.1)',
     backgroundColor: HEADER_BG_COLOR,
   },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  settingsButton: {
+    padding: 8,
+  },
   title: {
     fontSize: 24,
     fontWeight: '700',
