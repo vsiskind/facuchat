@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   Image,
   Pressable,
@@ -13,17 +12,44 @@ import {
   Modal,
   ScrollView,
   KeyboardAvoidingView,
+  Alert,
+  Animated,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { AppIcon } from '../../components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
 import { generateRandomUsername, getRandomAvatarUrl } from '../utils/anonymous';
+import { SortDropdown, SortOption } from '../../components/SortDropdown';
+import { feedStyles, commonStyles } from '../../styles/app.styles';
+import { Swipeable } from 'react-native-gesture-handler';
 import React from 'react';
 
-const ACCENT_COLOR = '#7C3AED';
-const HEADER_BG_COLOR = '#6B21A8';
-const UPVOTE_COLOR = '#10B981';
-const DOWNVOTE_COLOR = '#EF4444';
+const sortOptions: SortOption[] = [
+  {
+    id: 'recent',
+    label: 'Most Recent',
+    icon: 'time',
+    description: 'Show newest posts first'
+  },
+  {
+    id: 'popular',
+    label: 'Most Popular',
+    icon: 'trending-up',
+    description: 'Sort by highest number of upvotes'
+  },
+  {
+    id: 'controversial',
+    label: 'Controversial',
+    icon: 'flame',
+    description: 'Posts with most downvotes'
+  }
+];
+
+type Comment = Post['comments'][0] & {
+  parent_comment_id?: string | null;
+  depth?: number;
+  replies?: Comment[];
+};
 
 type Post = {
   id: string;
@@ -38,30 +64,28 @@ type Post = {
     vote_type: 'up' | 'down';
     user_id: string;
   }[];
-  comments: {
-    id: string;
-    content: string;
-    created_at: string;
-    author_id: string;
-    comment_identities: {
-      username: string;
-      avatar_url: string;
-    }[];
-    comment_votes: {
-      id: string;
-      vote_type: 'up' | 'down';
-      user_id: string;
-    }[];
-  }[];
+  comments: Comment[];
 };
 
-function Comment({ comment, postId, onVote }: { 
-  comment: Post['comments'][0];
+function Comment({ 
+  comment, 
+  postId, 
+  onVote,
+  onReply,
+  onDelete,
+  depth = 0 
+}: { 
+  comment: Comment;
   postId: string;
   onVote: (commentId: string, voteType: 'up' | 'down') => void;
+  onReply: (parentCommentId: string) => void;
+  onDelete: (commentId: string) => void;
+  depth?: number;
 }) {
   const [optimisticVotes, setOptimisticVotes] = useState(0);
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+  const [showReplies, setShowReplies] = useState(false);
+  const swipeableRef = React.useRef<Swipeable>(null);
 
   useEffect(() => {
     const upvotes = comment.comment_votes?.filter(vote => vote.vote_type === 'up').length || 0;
@@ -90,53 +114,158 @@ function Comment({ comment, postId, onVote }: {
     onVote(comment.id, voteType);
   };
 
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => swipeableRef.current?.close()
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            onDelete(comment.id);
+            swipeableRef.current?.close();
+          }
+        }
+      ]
+    );
+  };
+
+  const renderRightActions = (progress: Animated.AnimatedInterpolation<number>) => {
+    const trans = progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [100, 0],
+    });
+    
+    return (
+      <Animated.View 
+        style={[
+          feedStyles.swipeDeleteContainer,
+          {
+            transform: [{ translateX: trans }],
+          }
+        ]}
+      >
+        <Pressable
+          onPress={handleDelete}
+          style={feedStyles.swipeDeleteButton}
+        >
+          <AppIcon 
+            name="trash" 
+            size={24} 
+            color="#FFFFFF" 
+            outline={true} 
+          />
+        </Pressable>
+      </Animated.View>
+    );
+  };
+
+  const canReply = depth < 3; // Limit nesting to 3 levels
+  const hasReplies = comment.replies && comment.replies.length > 0;
+  const replyCount = comment.replies?.length || 0;
+  
   return (
-    <View style={styles.comment}>
-      <View style={styles.commentHeader}>
-        <Image 
-          source={{ uri: identity.avatar_url }} 
-          style={styles.commentAvatar} 
-        />
-        <View style={styles.commentAuthorInfo}>
-          <Text style={styles.commentUsername}>{identity.username}</Text>
-          <Text style={styles.commentTimestamp}>
-            {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
-          </Text>
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      rightThreshold={40}
+    >
+      <View style={[feedStyles.comment, { marginLeft: depth * 16 }]}>
+        <View style={feedStyles.commentHeader}>
+          <Image 
+            source={{ uri: identity.avatar_url }} 
+            style={feedStyles.commentAvatar} 
+          />
+          <View style={feedStyles.commentAuthorInfo}>
+            <Text style={feedStyles.commentUsername}>{identity.username}</Text>
+            <Text style={feedStyles.commentTimestamp}>
+              {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+            </Text>
+          </View>
         </View>
+        <Text style={feedStyles.commentContent}>{comment.content}</Text>
+        <View style={feedStyles.commentActions}>
+          <View style={feedStyles.commentVotes}>
+            <Pressable 
+              onPress={() => handleVote('up')} 
+              style={[feedStyles.voteButton, userVote === 'up' && feedStyles.voteButtonActive]}
+            >
+              <AppIcon 
+                name="arrow-up-circle" 
+                size={20} 
+                color={userVote === 'up' ? '#10B981' : '#666'} 
+                outline={userVote !== 'up'} 
+              />
+            </Pressable>
+            <Text style={[
+              feedStyles.voteCount,
+              optimisticVotes > 0 && feedStyles.upvoteText,
+              optimisticVotes < 0 && feedStyles.downvoteText
+            ]}>
+              {optimisticVotes}
+            </Text>
+            <Pressable 
+              onPress={() => handleVote('down')} 
+              style={[feedStyles.voteButton, userVote === 'down' && feedStyles.voteButtonActive]}
+            >
+              <AppIcon 
+                name="arrow-down-circle" 
+                size={20} 
+                color={userVote === 'down' ? '#EF4444' : '#666'} 
+                outline={userVote !== 'down'} 
+              />
+            </Pressable>
+          </View>
+          
+          {canReply && (
+            <Pressable 
+              style={feedStyles.replyButton} 
+              onPress={() => onReply(comment.id)}
+            >
+              <AppIcon name="chatbubble" size={16} color="#666" outline={true} />
+              <Text style={feedStyles.replyButtonText}>Reply</Text>
+            </Pressable>
+          )}
+          
+          {hasReplies && (
+            <Pressable 
+              style={feedStyles.toggleRepliesButton} 
+              onPress={() => setShowReplies(!showReplies)}
+            >
+              <AppIcon 
+                name={showReplies ? "chevron-up" : "chevron-down"} 
+                size={16} 
+                color="#666" 
+                outline={true} 
+              />
+              <Text style={feedStyles.toggleRepliesText}>
+                {showReplies ? "Hide replies" : `Show ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+
+        {hasReplies && showReplies && (
+          comment.replies.map(reply => (
+            <Comment
+              key={reply.id}
+              comment={reply}
+              postId={postId}
+              onVote={onVote}
+              onReply={onReply}
+              onDelete={onDelete}
+              depth={depth + 1}
+            />
+          ))
+        )}
       </View>
-      <Text style={styles.commentContent}>{comment.content}</Text>
-      <View style={styles.commentActions}>
-        <Pressable 
-          onPress={() => handleVote('up')} 
-          style={[styles.voteButton, userVote === 'up' && styles.voteButtonActive]}
-        >
-          <AppIcon 
-            name="arrow-up-circle" 
-            size={20} 
-            color={userVote === 'up' ? UPVOTE_COLOR : '#666'} 
-            outline={userVote !== 'up'} 
-          />
-        </Pressable>
-        <Text style={[
-          styles.voteCount,
-          optimisticVotes > 0 && styles.upvoteText,
-          optimisticVotes < 0 && styles.downvoteText
-        ]}>
-          {optimisticVotes}
-        </Text>
-        <Pressable 
-          onPress={() => handleVote('down')} 
-          style={[styles.voteButton, userVote === 'down' && styles.voteButtonActive]}
-        >
-          <AppIcon 
-            name="arrow-down-circle" 
-            size={20} 
-            color={userVote === 'down' ? DOWNVOTE_COLOR : '#666'} 
-            outline={userVote !== 'down'} 
-          />
-        </Pressable>
-      </View>
-    </View>
+    </Swipeable>
   );
 }
 
@@ -155,11 +284,16 @@ function CommentsFlyout({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commentUsername, setCommentUsername] = useState('');
   const [commentAvatar, setCommentAvatar] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+
+  const generateNewIdentity = () => {
+    setCommentUsername(generateRandomUsername());
+    setCommentAvatar(getRandomAvatarUrl());
+  };
 
   useEffect(() => {
     if (visible) {
-      setCommentUsername(generateRandomUsername());
-      setCommentAvatar(getRandomAvatarUrl());
+      generateNewIdentity();
     }
   }, [visible]);
 
@@ -184,6 +318,25 @@ function CommentsFlyout({
     }
   };
 
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('author_id', user.id);
+
+      if (error) throw error;
+      
+      onRefresh();
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+    }
+  };
+
   const handleSubmitComment = async () => {
     if (!commentText.trim()) return;
 
@@ -198,6 +351,7 @@ function CommentsFlyout({
           post_id: post.id,
           author_id: user.id,
           content: commentText,
+          parent_comment_id: replyingTo,
         }])
         .select('id')
         .single();
@@ -217,6 +371,9 @@ function CommentsFlyout({
       }
 
       setCommentText('');
+      setReplyingTo(null);
+      // Generate a new identity after successful comment submission
+      generateNewIdentity();
       onRefresh();
     } catch (error) {
       console.error('Error creating comment:', error);
@@ -224,6 +381,47 @@ function CommentsFlyout({
       setIsSubmitting(false);
     }
   };
+
+  const handleReply = (parentCommentId: string) => {
+    setReplyingTo(parentCommentId);
+    // Generate a new identity when starting a reply
+    generateNewIdentity();
+  };
+
+  const organizedComments = useMemo(() => {
+    const commentMap = new Map<string, Comment>();
+    const topLevelComments: Comment[] = [];
+    
+    // First pass: create a map of all comments
+    post.comments?.forEach(comment => {
+      commentMap.set(comment.id, { ...comment, replies: [] });
+    });
+    
+    // Second pass: organize into tree structure
+    post.comments?.forEach(comment => {
+      const currentComment = commentMap.get(comment.id)!;
+      if (comment.parent_comment_id) {
+        const parentComment = commentMap.get(comment.parent_comment_id);
+        if (parentComment) {
+          parentComment.replies = parentComment.replies || [];
+          parentComment.replies.push(currentComment);
+        } else {
+          // If parent doesn't exist (perhaps deleted), add as top-level
+          topLevelComments.push(currentComment);
+        }
+      } else {
+        topLevelComments.push(currentComment);
+      }
+    });
+    
+    // Sort top-level comments by creation date (newest first)
+    return topLevelComments.sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [post.comments]);
+
+  const replyingToComment = replyingTo ? post.comments.find(c => c.id === replyingTo) : null;
+  const replyingToIdentity = replyingToComment?.comment_identities?.[0]?.username || 'Anonymous';
 
   return (
     <Modal
@@ -234,47 +432,64 @@ function CommentsFlyout({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalContainer}
+        style={feedStyles.modalContainer}
       >
-        <View style={styles.flyoutContent}>
-          <View style={styles.flyoutHeader}>
-            <Text style={styles.flyoutTitle}>Comments</Text>
-            <Pressable onPress={onClose} style={styles.closeButton}>
+        <View style={feedStyles.flyoutContent}>
+          <View style={feedStyles.flyoutHeader}>
+            <Text style={feedStyles.flyoutTitle}>Comments</Text>
+            <Pressable onPress={onClose} style={feedStyles.closeButton}>
               <AppIcon name="close" size={24} color="#666" outline={true} />
             </Pressable>
           </View>
 
-          <ScrollView style={styles.commentsList}>
-            {post.comments?.length === 0 ? (
-              <View style={styles.emptyComments}>
-                <Text style={styles.emptyCommentsText}>No comments yet</Text>
-                <Text style={styles.emptyCommentsSubtext}>Be the first to comment!</Text>
+          <ScrollView style={feedStyles.commentsList}>
+            {organizedComments.length === 0 ? (
+              <View style={feedStyles.emptyContainer}>
+                <Text style={feedStyles.emptyText}>No comments yet</Text>
+                <Text style={feedStyles.emptySubtext}>Be the first to comment!</Text>
               </View>
             ) : (
-              post.comments?.map(comment => (
+              organizedComments.map(comment => (
                 <Comment 
                   key={comment.id} 
                   comment={comment} 
                   postId={post.id}
                   onVote={handleCommentVote}
+                  onReply={handleReply}
+                  onDelete={handleDeleteComment}
+                  depth={0}
                 />
               ))
             )}
           </ScrollView>
 
-          <View style={styles.commentInputContainer}>
-            <View style={styles.identityPreview}>
+          <View style={feedStyles.commentInputContainer}>
+            {replyingTo && (
+              <View style={feedStyles.replyingToContainer}>
+                <Text style={feedStyles.replyingToText}>
+                  Replying to {replyingToIdentity}
+                </Text>
+                <Pressable
+                  style={feedStyles.cancelReplyButton}
+                  onPress={() => setReplyingTo(null)}
+                >
+                  <AppIcon name="close" size={16} color="#666" outline={true} />
+                </Pressable>
+              </View>
+            )}
+            
+            <View style={feedStyles.identityPreview}>
               <Image 
                 source={{ uri: commentAvatar }} 
-                style={styles.previewAvatar} 
+                style={feedStyles.previewAvatar} 
               />
-              <Text style={styles.previewUsername}>{commentUsername}</Text>
+              <Text style={feedStyles.previewUsername}>{commentUsername}</Text>
             </View>
             
-            <View style={styles.inputRow}>
+            <View style={feedStyles.inputRow}>
               <TextInput
-                style={styles.commentInput}
-                placeholder="Write a comment..."
+                style={feedStyles.commentInput}
+                placeholder={replyingTo ? "Write a reply..." : "Write a comment..."}
                 value={commentText}
                 onChangeText={setCommentText}
                 multiline
@@ -283,8 +498,8 @@ function CommentsFlyout({
               />
               <Pressable
                 style={[
-                  styles.sendButton,
-                  (!commentText.trim() || isSubmitting) && styles.sendButtonDisabled
+                  feedStyles.sendButton,
+                  (!commentText.trim() || isSubmitting) && feedStyles.sendButtonDisabled
                 ]}
                 onPress={handleSubmitComment}
                 disabled={!commentText.trim() || isSubmitting}
@@ -354,61 +569,61 @@ function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
   };
 
   return (
-    <View style={styles.postCard}>
-      <View style={styles.postHeader}>
+    <View style={feedStyles.postCard}>
+      <View style={feedStyles.postHeader}>
         <Image 
           source={{ uri: identity.avatar_url }} 
-          style={styles.avatar} 
+          style={feedStyles.avatar} 
         />
-        <View style={styles.authorInfo}>
-          <Text style={styles.username}>{identity.username}</Text>
-          <Text style={styles.timestamp}>
+        <View style={feedStyles.authorInfo}>
+          <Text style={feedStyles.username}>{identity.username}</Text>
+          <Text style={feedStyles.timestamp}>
             {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
           </Text>
         </View>
       </View>
       
-      <Text style={styles.content}>{post.content}</Text>
+      <Text style={feedStyles.content}>{post.content}</Text>
       
-      <View style={styles.actions}>
-        <View style={styles.votes}>
+      <View style={feedStyles.actions}>
+        <View style={feedStyles.votes}>
           <Pressable 
             onPress={() => handlePostVote('up')} 
-            style={[styles.voteButton, userVote === 'up' && styles.voteButtonActive]}
+            style={[feedStyles.voteButton, userVote === 'up' && feedStyles.voteButtonActive]}
           >
             <AppIcon 
               name="arrow-up-circle" 
               size={24} 
-              color={userVote === 'up' ? UPVOTE_COLOR : '#666'} 
+              color={userVote === 'up' ? '#10B981' : '#666'} 
               outline={userVote !== 'up'} 
             />
           </Pressable>
           <Text style={[
-            styles.voteCount,
-            optimisticVotes > 0 && styles.upvoteText,
-            optimisticVotes < 0 && styles.downvoteText
+            feedStyles.voteCount,
+            optimisticVotes > 0 && feedStyles.upvoteText,
+            optimisticVotes < 0 && feedStyles.downvoteText
           ]}>
             {optimisticVotes}
           </Text>
           <Pressable 
             onPress={() => handlePostVote('down')} 
-            style={[styles.voteButton, userVote === 'down' && styles.voteButtonActive]}
+            style={[feedStyles.voteButton, userVote === 'down' && feedStyles.voteButtonActive]}
           >
             <AppIcon 
               name="arrow-down-circle" 
               size={24} 
-              color={userVote === 'down' ? DOWNVOTE_COLOR : '#666'} 
+              color={userVote === 'down' ? '#EF4444' : '#666'} 
               outline={userVote !== 'down'} 
             />
           </Pressable>
         </View>
         
         <Pressable 
-          style={styles.commentCount} 
+          style={feedStyles.commentCount} 
           onPress={() => setShowComments(true)}
         >
           <AppIcon name="chatbubble" size={20} color="#666" outline={true} />
-          <Text style={styles.commentCountText}>
+          <Text style={feedStyles.commentCountText}>
             {post.comments?.length || 0} comments
           </Text>
         </Pressable>
@@ -429,10 +644,12 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSort, setSelectedSort] = useState<SortOption>(sortOptions[0]);
+  const [rawPosts, setRawPosts] = useState<Post[]>([]);
 
   const fetchPosts = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('posts')
         .select(`
           *,
@@ -443,14 +660,16 @@ export default function HomeScreen() {
             content,
             created_at,
             author_id,
+            parent_comment_id,
+            depth,
             comment_identities (*),
             comment_votes (*)
           )
-        `)
-        .order('created_at', { ascending: false });
+        `);
 
+      const { data, error } = await query;
       if (error) throw error;
-      setPosts(data as Post[]);
+      setRawPosts(data as Post[]);
     } catch (err: any) {
       console.error('Error fetching posts:', err);
       setError(err.message);
@@ -459,6 +678,52 @@ export default function HomeScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  const sortedPosts = useMemo(() => {
+    return [...rawPosts].sort((a, b) => {
+      const getVoteCount = (post: Post) => {
+        const upvotes = post.votes?.filter(v => v.vote_type === 'up').length || 0;
+        const downvotes = post.votes?.filter(v => v.vote_type === 'down').length || 0;
+        return upvotes - downvotes;
+      };
+
+      switch (selectedSort.id) {
+        case 'recent':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        
+        case 'popular': {
+          const aVotes = getVoteCount(a);
+          const bVotes = getVoteCount(b);
+          
+          // If both posts have the same sign (both positive, both negative, or both zero)
+          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
+            return bVotes - aVotes; // Higher votes first
+          }
+          // If signs are different, positive goes first
+          return bVotes > 0 ? 1 : -1;
+        }
+        
+        case 'controversial': {
+          const aVotes = getVoteCount(a);
+          const bVotes = getVoteCount(b);
+          
+          // If both posts have the same sign (both positive, both negative, or both zero)
+          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
+            return aVotes - bVotes; // Lower votes first
+          }
+          // If signs are different, negative goes first
+          return aVotes < 0 ? -1 : 1;
+        }
+        
+        default:
+          return 0;
+      }
+    });
+  }, [rawPosts, selectedSort.id]);
+
+  useEffect(() => {
+    setPosts(sortedPosts);
+  }, [sortedPosts]);
 
   useEffect(() => {
     fetchPosts();
@@ -471,12 +736,12 @@ export default function HomeScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Campus Connect</Text>
+      <View style={feedStyles.container}>
+        <View style={feedStyles.header}>
+          <Text style={feedStyles.title}>Campus Connect</Text>
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={ACCENT_COLOR} />
+        <View style={commonStyles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7C3AED" />
         </View>
       </View>
     );
@@ -484,14 +749,14 @@ export default function HomeScreen() {
 
   if (error) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Campus Connect</Text>
+      <View style={feedStyles.container}>
+        <View style={feedStyles.header}>
+          <Text style={feedStyles.title}>Campus Connect</Text>
         </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Error: {error}</Text>
-          <Pressable style={styles.retryButton} onPress={fetchPosts}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+        <View style={commonStyles.errorContainer}>
+          <Text style={commonStyles.errorText}>Error: {error}</Text>
+          <Pressable style={commonStyles.retryButton} onPress={fetchPosts}>
+            <Text style={commonStyles.retryButtonText}>Retry</Text>
           </Pressable>
         </View>
       </View>
@@ -499,30 +764,38 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Campus Connect</Text>
+    <View style={feedStyles.container}>
+      <View style={feedStyles.header}>
+        <Text style={feedStyles.title}>Campus Connect</Text>
       </View>
       
+      <View style={feedStyles.sortContainer}>
+        <SortDropdown
+          options={sortOptions}
+          selectedOption={selectedSort}
+          onSelect={setSelectedSort}
+        />
+      </View>
+
       <FlatList
         data={posts}
         renderItem={({ item }) => (
           <PostCard post={item} onRefresh={fetchPosts} />
         )}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.feed}
+        contentContainerStyle={feedStyles.feed}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[ACCENT_COLOR]}
-            tintColor={ACCENT_COLOR}
+            colors={['#7C3AED']}
+            tintColor="#7C3AED"
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No posts yet</Text>
-            <Text style={styles.emptySubtext}>
+          <View style={commonStyles.emptyContainer}>
+            <Text style={commonStyles.emptyText}>No posts yet</Text>
+            <Text style={commonStyles.emptySubtext}>
               Be the first to share something with your campus!
             </Text>
           </View>
@@ -531,295 +804,3 @@ export default function HomeScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F6F8FA',
-  },
-  header: {
-    padding: 16,
-    paddingTop: Platform.OS === 'web' ? 16 : 60,
-    backgroundColor: HEADER_BG_COLOR,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  feed: {
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#EF4444',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: ACCENT_COLOR,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-  },
-  postCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-    backgroundColor: '#F3E8FF',
-  },
-  authorInfo: {
-    flex: 1,
-  },
-  username: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: ACCENT_COLOR,
-  },
-  timestamp: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  content: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#1A1A1A',
-    padding: 16,
-    paddingTop: 0,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  votes: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  voteButton: {
-    padding: 4,
-  },
-  voteButtonActive: {
-    transform: [{ scale: 1.1 }],
-  },
-  voteCount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginHorizontal: 8,
-    minWidth: 24,
-    textAlign: 'center',
-  },
-  upvoteText: {
-    color: UPVOTE_COLOR,
-  },
-  downvoteText: {
-    color: DOWNVOTE_COLOR,
-  },
-  commentCount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-  },
-  commentCountText: {
-    fontSize: 14,
-    color: '#666666',
-    marginLeft: 4,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  flyoutContent: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    marginTop: Platform.OS === 'ios' ? 60 : 40,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  flyoutHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  flyoutTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  closeButton: {
-    padding: 8,
-  },
-  commentsList: {
-    flex: 1,
-    padding: 16,
-  },
-  emptyComments: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyCommentsText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 8,
-  },
-  emptyCommentsSubtext: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-  },
-  comment: {
-    backgroundColor: '#F6F8FA',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  commentAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  commentAuthorInfo: {
-    flex: 1,
-  },
-  commentUsername: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: ACCENT_COLOR,
-  },
-  commentTimestamp: {
-    fontSize: 12,
-    color: '#666666',
-  },
-  commentContent: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#1A1A1A',
-    marginBottom: 8,
-  },
-  commentActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  commentInputContainer: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    backgroundColor: '#FFFFFF',
-  },
-  identityPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  previewAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
-  },
-  previewUsername: {
-    fontSize: 14,
-    color: ACCENT_COLOR,
-    fontWeight: '500',
-    flex: 1,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: '#F6F8FA',
-    borderRadius: 12,
-    padding: 12,
-    marginRight: 8,
-    fontSize: 16,
-    maxHeight: 100,
-  },
-  sendButton: {
-    backgroundColor: ACCENT_COLOR,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
-});
