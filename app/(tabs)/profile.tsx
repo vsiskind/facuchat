@@ -480,21 +480,23 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      router.replace('/auth/sign-in');
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    }
+  const navigateToSettings = () => {
+    router.push('/settings');
   };
 
   if (loading && !refreshing) {
     return (
       <View style={profileStyles.container}>
         <View style={profileStyles.header}>
-          <Text style={profileStyles.title}>Your Activity</Text>
+          <View style={profileStyles.headerContent}>
+            <Text style={profileStyles.title}>Your Activity</Text>
+            <Pressable 
+              onPress={navigateToSettings} 
+              style={profileStyles.settingsButton}
+            >
+              <AppIcon name="menu" size={24} color="#FFFFFF" outline={true} />
+            </Pressable>
+          </View>
         </View>
         <View style={commonStyles.loadingContainer}>
           <ActivityIndicator size="large" color="#7C3AED" />
@@ -508,7 +510,15 @@ export default function ProfileScreen() {
     return (
       <View style={profileStyles.container}>
         <View style={profileStyles.header}>
-          <Text style={profileStyles.title}>Your Activity</Text>
+          <View style={profileStyles.headerContent}>
+            <Text style={profileStyles.title}>Your Activity</Text>
+            <Pressable 
+              onPress={navigateToSettings} 
+              style={profileStyles.settingsButton}
+            >
+              <AppIcon name="menu" size={24} color="#FFFFFF" outline={true} />
+            </Pressable>
+          </View>
         </View>
         <View style={commonStyles.errorContainer}>
           <Text style={commonStyles.errorText}>Error: {error}</Text>
@@ -523,7 +533,15 @@ export default function ProfileScreen() {
   return (
     <View style={profileStyles.container}>
       <View style={profileStyles.header}>
-        <Text style={profileStyles.title}>Your Activity</Text>
+        <View style={profileStyles.headerContent}>
+          <Text style={profileStyles.title}>Your Activity</Text>
+          <Pressable 
+            onPress={navigateToSettings} 
+            style={profileStyles.settingsButton}
+          >
+            <AppIcon name="menu" size={24} color="#FFFFFF" outline={true} />
+          </Pressable>
+        </View>
         <View style={profileStyles.karmaContainer}>
           <AppIcon name="trophy" size={18} color="#F3E8FF" outline={true} />
           <Text style={profileStyles.karmaText}>
@@ -631,12 +649,6 @@ export default function ProfileScreen() {
           }
         />
       )}
-      
-      <View style={profileStyles.footer}>
-        <Pressable style={profileStyles.signOutButton} onPress={handleSignOut}>
-          <Text style={profileStyles.signOutButtonText}>Sign Out</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
