@@ -3,6 +3,8 @@ import { Slot, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSupabaseAuth } from '../hooks/useSupabaseAuth';
 import { View, Text, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 
 declare global {
   interface Window {
@@ -11,6 +13,7 @@ declare global {
 }
 
 export default function RootLayout() {
+  useFrameworkReady();
   const { session, loading } = useSupabaseAuth();
 
   useEffect(() => {
@@ -25,27 +28,31 @@ export default function RootLayout() {
   // Show loading state while auth is being checked
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </GestureHandlerRootView>
     );
   }
 
   // If environment variables are missing, show setup screen
   if (missingEnvVars) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Setup Required</Text>
-        <Text style={styles.message}>
-          Please connect your Supabase project by clicking the "Connect to Supabase" button in the top right.
-        </Text>
-      </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={styles.container}>
+          <Text style={styles.title}>Setup Required</Text>
+          <Text style={styles.message}>
+            Please connect your Supabase project by clicking the "Connect to Supabase" button in the top right.
+          </Text>
+        </View>
+      </GestureHandlerRootView>
     );
   }
 
   // Always render a Slot for the router to work properly
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen 
           name="(tabs)" 
@@ -59,7 +66,7 @@ export default function RootLayout() {
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />
-    </>
+    </GestureHandlerRootView>
   );
 }
 

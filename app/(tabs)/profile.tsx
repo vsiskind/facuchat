@@ -1,14 +1,34 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, Pressable, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, FlatList, Image, Pressable, ActivityIndicator, Alert, RefreshControl, Animated as RNAnimated } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
 import { AppIcon } from '../../components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
+import { SortDropdown, SortOption } from '../../components/SortDropdown';
+import { profileStyles, commonStyles, feedStyles } from '../../styles/app.styles';
+import { Swipeable } from 'react-native-gesture-handler';
 import React from 'react';
 
-const ACCENT_COLOR = '#7C3AED';
-const HEADER_BG_COLOR = '#6B21A8'; // Deeper purple for header
-const DANGER_COLOR = '#EF4444'; // Red for delete actions
+const sortOptions: SortOption[] = [
+  {
+    id: 'recent',
+    label: 'Most Recent',
+    icon: 'time',
+    description: 'Show newest posts first'
+  },
+  {
+    id: 'popular',
+    label: 'Most Popular',
+    icon: 'trending-up',
+    description: 'Sort by highest number of upvotes'
+  },
+  {
+    id: 'controversial',
+    label: 'Controversial',
+    icon: 'flame',
+    description: 'Posts with most downvotes'
+  }
+];
 
 type Post = {
   id: string;
@@ -28,18 +48,35 @@ type Post = {
   }[];
 };
 
+type Comment = {
+  id: string;
+  content: string;
+  created_at: string;
+  post_id: string;
+  comment_identities: {
+    username: string;
+    avatar_url: string;
+  }[];
+  comment_votes: {
+    id: string;
+    vote_type: 'up' | 'down';
+    user_id: string;
+  }[];
+  posts: {
+    content: string;
+  };
+};
+
 function PostCard({ post, onDelete, onRefresh }: { 
   post: Post; 
   onDelete: (postId: string) => void;
   onRefresh: () => void;
 }) {
-  // Get the post identity (username and avatar)
   const identity = post.post_identities[0] || { 
     username: 'Anonymous', 
     avatar_url: 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' 
   };
 
-  // Calculate vote count
   const upvotes = post.votes?.filter(vote => vote.vote_type === 'up').length || 0;
   const downvotes = post.votes?.filter(vote => vote.vote_type === 'down').length || 0;
   const votes = upvotes - downvotes;
@@ -63,37 +100,102 @@ function PostCard({ post, onDelete, onRefresh }: {
   };
 
   return (
-    <View style={styles.postCard}>
-      <View style={styles.postHeader}>
+    <View style={profileStyles.postCard}>
+      <View style={profileStyles.postHeader}>
         <Image 
           source={{ uri: identity.avatar_url || 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' }} 
-          style={styles.avatar} 
+          style={profileStyles.avatar} 
         />
-        <View style={styles.authorInfo}>
-          <Text style={styles.username}>{identity.username}</Text>
-          <Text style={styles.timestamp}>
+        <View style={profileStyles.authorInfo}>
+          <Text style={profileStyles.username}>{identity.username}</Text>
+          <Text style={profileStyles.timestamp}>
             {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
           </Text>
         </View>
         <Pressable 
           onPress={handleDelete}
           style={({ pressed }) => [
-            styles.deleteButton,
-            pressed && styles.deleteButtonPressed
+            profileStyles.deleteButton,
+            pressed && profileStyles.deleteButtonPressed
           ]}
         >
-          <AppIcon name="trash" size={20} color={DANGER_COLOR} outline={true} />
+          <AppIcon name="trash" size={20} color="#EF4444" outline={true} />
         </Pressable>
       </View>
-      <Text style={styles.content}>{post.content}</Text>
-      <View style={styles.stats}>
-        <View style={styles.statItem}>
+      <Text style={profileStyles.content}>{post.content}</Text>
+      <View style={profileStyles.stats}>
+        <View style={profileStyles.statItem}>
           <AppIcon name="arrow-up-circle" size={16} color="#666" outline={true} />
-          <Text style={styles.statText}>{votes} votes</Text>
+          <Text style={profileStyles.statText}>{votes} votes</Text>
         </View>
-        <View style={styles.statItem}>
+        <View style={profileStyles.statItem}>
           <AppIcon name="chatbubble" size={16} color="#666" outline={true} />
-          <Text style={styles.statText}>{post.comments?.length || 0} comments</Text>
+          <Text style={profileStyles.statText}>{post.comments?.length || 0} comments</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function CommentCard({ comment, onDelete }: { 
+  comment: Comment;
+  onDelete: (commentId: string) => void;
+}) {
+  const identity = comment.comment_identities[0] || { 
+    username: 'Anonymous', 
+    avatar_url: 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' 
+  };
+
+  const upvotes = comment.comment_votes?.filter(vote => vote.vote_type === 'up').length || 0;
+  const downvotes = comment.comment_votes?.filter(vote => vote.vote_type === 'down').length || 0;
+  const votes = upvotes - downvotes;
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => onDelete(comment.id)
+        }
+      ]
+    );
+  };
+
+  return (
+    <View style={profileStyles.commentCard}>
+      <View style={profileStyles.postHeader}>
+        <Image 
+          source={{ uri: identity.avatar_url || 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' }} 
+          style={profileStyles.avatar} 
+        />
+        <View style={profileStyles.authorInfo}>
+          <Text style={profileStyles.username}>{identity.username}</Text>
+          <Text style={profileStyles.timestamp}>
+            {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+          </Text>
+        </View>
+        <Pressable 
+          onPress={handleDelete}
+          style={({ pressed }) => [
+            profileStyles.deleteButton,
+            pressed && profileStyles.deleteButtonPressed
+          ]}
+        >
+          <AppIcon name="trash" size={20} color="#EF4444" outline={true} />
+        </Pressable>
+      </View>
+      <Text style={profileStyles.content}>{comment.content}</Text>
+      <View style={profileStyles.stats}>
+        <View style={profileStyles.statItem}>
+          <AppIcon name="arrow-up-circle" size={16} color="#666" outline={true} />
+          <Text style={profileStyles.statText}>{votes} votes</Text>
         </View>
       </View>
     </View>
@@ -101,19 +203,146 @@ function PostCard({ post, onDelete, onRefresh }: {
 }
 
 export default function ProfileScreen() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'posts' | 'comments'>('posts');
+  
+  // Posts state
   const [posts, setPosts] = useState<Post[]>([]);
+  const [rawPosts, setRawPosts] = useState<Post[]>([]);
+  
+  // Comments state
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [rawComments, setRawComments] = useState<Comment[]>([]);
+  
+  // Karma state
+  const [karma, setKarma] = useState(0);
+  
+  // Shared state
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSort, setSelectedSort] = useState<SortOption>(sortOptions[0]);
+
+  // Calculate karma from posts and comments
+  const calculateKarma = useCallback(() => {
+    // Calculate karma from posts
+    const postKarma = rawPosts.reduce((total, post) => {
+      const upvotes = post.votes?.filter(vote => vote.vote_type === 'up').length || 0;
+      const downvotes = post.votes?.filter(vote => vote.vote_type === 'down').length || 0;
+      return total + upvotes - downvotes;
+    }, 0);
+
+    // Calculate karma from comments
+    const commentKarma = rawComments.reduce((total, comment) => {
+      const upvotes = comment.comment_votes?.filter(vote => vote.vote_type === 'up').length || 0;
+      const downvotes = comment.comment_votes?.filter(vote => vote.vote_type === 'down').length || 0;
+      return total + upvotes - downvotes;
+    }, 0);
+
+    // Total karma
+    return postKarma + commentKarma;
+  }, [rawPosts, rawComments]);
+
+  // Update karma whenever posts or comments change
+  useEffect(() => {
+    const newKarma = calculateKarma();
+    setKarma(newKarma);
+  }, [rawPosts, rawComments, calculateKarma]);
+
+  const sortedPosts = useMemo(() => {
+    return [...rawPosts].sort((a, b) => {
+      const getVoteCount = (post: Post) => {
+        const upvotes = post.votes?.filter(v => v.vote_type === 'up').length || 0;
+        const downvotes = post.votes?.filter(v => v.vote_type === 'down').length || 0;
+        return upvotes - downvotes;
+      };
+
+      switch (selectedSort.id) {
+        case 'recent':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        
+        case 'popular': {
+          const aVotes = getVoteCount(a);
+          const bVotes = getVoteCount(b);
+          
+          // If both posts have the same sign (both positive, both negative, or both zero)
+          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
+            return bVotes - aVotes; // Higher votes first
+          }
+          // If signs are different, positive goes first
+          return bVotes > 0 ? 1 : -1;
+        }
+        
+        case 'controversial': {
+          const aVotes = getVoteCount(a);
+          const bVotes = getVoteCount(b);
+          
+          // If both posts have the same sign (both positive, both negative, or both zero)
+          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
+            return aVotes - bVotes; // Lower votes first
+          }
+          // If signs are different, negative goes first
+          return aVotes < 0 ? -1 : 1;
+        }
+        
+        default:
+          return 0;
+      }
+    });
+  }, [rawPosts, selectedSort.id]);
+
+  const sortedComments = useMemo(() => {
+    return [...rawComments].sort((a, b) => {
+      const getVoteCount = (comment: Comment) => {
+        const upvotes = comment.comment_votes?.filter(v => v.vote_type === 'up').length || 0;
+        const downvotes = comment.comment_votes?.filter(v => v.vote_type === 'down').length || 0;
+        return upvotes - downvotes;
+      };
+
+      switch (selectedSort.id) {
+        case 'recent':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        
+        case 'popular': {
+          const aVotes = getVoteCount(a);
+          const bVotes = getVoteCount(b);
+          
+          // If both comments have the same sign (both positive, both negative, or both zero)
+          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
+            return bVotes - aVotes; // Higher votes first
+          }
+          // If signs are different, positive goes first
+          return bVotes > 0 ? 1 : -1;
+        }
+        
+        case 'controversial': {
+          const aVotes = getVoteCount(a);
+          const bVotes = getVoteCount(b);
+          
+          // If both comments have the same sign (both positive, both negative, or both zero)
+          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
+            return aVotes - bVotes; // Lower votes first
+          }
+          // If signs are different, negative goes first
+          return aVotes < 0 ? -1 : 1;
+        }
+        
+        default:
+          return 0;
+      }
+    });
+  }, [rawComments, selectedSort.id]);
 
   useEffect(() => {
-    fetchUserPosts();
-  }, []);
+    setPosts(sortedPosts);
+  }, [sortedPosts]);
+
+  useEffect(() => {
+    setComments(sortedComments);
+  }, [sortedComments]);
 
   async function fetchUserPosts() {
     try {
-      setLoading(true);
-      
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -139,24 +368,76 @@ export default function ProfileScreen() {
             id
           )
         `)
-        .eq('author_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('author_id', user.id);
 
       if (error) throw error;
-
-      setPosts(data as Post[]);
+      setRawPosts(data as Post[]);
     } catch (err: any) {
       setError(err.message);
       console.error('Error fetching user posts:', err);
+    }
+  }
+
+  async function fetchUserComments() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
+      
+      const { data, error } = await supabase
+        .from('comments')
+        .select(`
+          id,
+          content,
+          created_at,
+          post_id,
+          posts (
+            content
+          ),
+          comment_identities (
+            username,
+            avatar_url
+          ),
+          comment_votes (
+            id,
+            vote_type,
+            user_id
+          )
+        `)
+        .eq('author_id', user.id);
+
+      if (error) throw error;
+      setRawComments(data as Comment[]);
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Error fetching user comments:', err);
+    }
+  }
+
+  async function fetchUserData() {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchUserPosts(),
+        fetchUserComments()
+      ]);
+    } catch (err) {
+      console.error('Error fetching user data:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
 
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchUserPosts();
+    fetchUserData();
   };
 
   const handleDeletePost = async (postId: string) => {
@@ -179,6 +460,26 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId);
+
+      if (error) throw error;
+      
+      // Refresh the comments list after deletion
+      await fetchUserComments();
+    } catch (err: any) {
+      Alert.alert('Error', 'Failed to delete comment. Please try again.');
+      console.error('Error deleting comment:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSignOut = async () => {
     try {
       const { error } = await supabase.auth.signOut();
@@ -191,13 +492,13 @@ export default function ProfileScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Your Posts</Text>
+      <View style={profileStyles.container}>
+        <View style={profileStyles.header}>
+          <Text style={profileStyles.title}>Your Activity</Text>
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={ACCENT_COLOR} />
-          <Text style={styles.loadingText}>Loading your posts...</Text>
+        <View style={commonStyles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7C3AED" />
+          <Text style={commonStyles.loadingText}>Loading your activity...</Text>
         </View>
       </View>
     );
@@ -205,14 +506,14 @@ export default function ProfileScreen() {
 
   if (error) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Your Posts</Text>
+      <View style={profileStyles.container}>
+        <View style={profileStyles.header}>
+          <Text style={profileStyles.title}>Your Activity</Text>
         </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Error: {error}</Text>
-          <Pressable style={styles.retryButton} onPress={fetchUserPosts}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+        <View style={commonStyles.errorContainer}>
+          <Text style={commonStyles.errorText}>Error: {error}</Text>
+          <Pressable style={commonStyles.retryButton} onPress={fetchUserData}>
+            <Text style={commonStyles.retryButtonText}>Retry</Text>
           </Pressable>
         </View>
       </View>
@@ -220,211 +521,122 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Your Posts</Text>
-        <Text style={styles.subtitle}>
-          Each post uses a unique anonymous identity
-        </Text>
+    <View style={profileStyles.container}>
+      <View style={profileStyles.header}>
+        <Text style={profileStyles.title}>Your Activity</Text>
+        <View style={profileStyles.karmaContainer}>
+          <AppIcon name="trophy" size={18} color="#F3E8FF" outline={true} />
+          <Text style={profileStyles.karmaText}>
+            {karma} karma points
+          </Text>
+        </View>
       </View>
       
-      <FlatList
-        data={posts}
-        renderItem={({ item }) => (
-          <PostCard 
-            post={item} 
-            onDelete={handleDeletePost}
-            onRefresh={fetchUserPosts}
+      <View style={profileStyles.contentContainer}>
+        <View style={profileStyles.tabsContainer}>
+          <Pressable
+            style={[
+              profileStyles.tabButton,
+              activeTab === 'posts' && profileStyles.activeTabButton
+            ]}
+            onPress={() => setActiveTab('posts')}
+          >
+            <Text 
+              style={[
+                profileStyles.tabButtonText,
+                activeTab === 'posts' && profileStyles.activeTabButtonText
+              ]}
+            >
+              Posts
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[
+              profileStyles.tabButton,
+              activeTab === 'comments' && profileStyles.activeTabButton
+            ]}
+            onPress={() => setActiveTab('comments')}
+          >
+            <Text 
+              style={[
+                profileStyles.tabButtonText,
+                activeTab === 'comments' && profileStyles.activeTabButtonText
+              ]}
+            >
+              Comments
+            </Text>
+          </Pressable>
+        </View>
+        
+        <View style={profileStyles.sortContainer}>
+          <SortDropdown
+            options={sortOptions}
+            selectedOption={selectedSort}
+            onSelect={setSelectedSort}
           />
-        )}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.feed}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[ACCENT_COLOR]}
-            tintColor={ACCENT_COLOR}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>You haven't posted anything yet</Text>
-            <Text style={styles.emptySubtext}>Your posts will appear here</Text>
-          </View>
-        }
-      />
+        </View>
+      </View>
       
-      <View style={styles.footer}>
-        <Pressable style={styles.signOutButton} onPress={handleSignOut}>
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
+      {activeTab === 'posts' ? (
+        <FlatList
+          data={posts}
+          renderItem={({ item }) => (
+            <PostCard 
+              post={item} 
+              onDelete={handleDeletePost}
+              onRefresh={fetchUserPosts}
+            />
+          )}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={profileStyles.feed}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#7C3AED']}
+              tintColor="#7C3AED"
+            />
+          }
+          ListEmptyComponent={
+            <View style={commonStyles.emptyContainer}>
+              <Text style={commonStyles.emptyText}>You haven't posted anything yet</Text>
+              <Text style={commonStyles.emptySubtext}>Your posts will appear here</Text>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={comments}
+          renderItem={({ item }) => (
+            <CommentCard 
+              comment={item}
+              onDelete={handleDeleteComment}
+            />
+          )}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={profileStyles.feed}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#7C3AED']}
+              tintColor="#7C3AED"
+            />
+          }
+          ListEmptyComponent={
+            <View style={commonStyles.emptyContainer}>
+              <Text style={commonStyles.emptyText}>You haven't commented on any posts yet</Text>
+              <Text style={commonStyles.emptySubtext}>Your comments will appear here</Text>
+            </View>
+          }
+        />
+      )}
+      
+      <View style={profileStyles.footer}>
+        <Pressable style={profileStyles.signOutButton} onPress={handleSignOut}>
+          <Text style={profileStyles.signOutButtonText}>Sign Out</Text>
         </Pressable>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F6F8FA',
-  },
-  header: {
-    padding: 16,
-    paddingTop: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: HEADER_BG_COLOR,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#F3E8FF',
-    marginTop: 4,
-  },
-  feed: {
-    padding: 16,
-    paddingBottom: 80, // Extra padding for footer
-  },
-  postCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  postHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-    backgroundColor: '#F3E8FF',
-  },
-  authorInfo: {
-    flex: 1,
-  },
-  username: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: ACCENT_COLOR,
-  },
-  timestamp: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  deleteButton: {
-    padding: 8,
-    borderRadius: 20,
-  },
-  deleteButtonPressed: {
-    opacity: 0.7,
-    backgroundColor: '#FEE2E2',
-  },
-  content: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#1A1A1A',
-    marginBottom: 12,
-  },
-  stats: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    paddingTop: 12,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  statText: {
-    fontSize: 14,
-    color: '#666666',
-    marginLeft: 4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666666',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#EF4444',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: ACCENT_COLOR,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
-  },
-  signOutButton: {
-    backgroundColor: '#F3E8FF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  signOutButtonText: {
-    color: ACCENT_COLOR,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
