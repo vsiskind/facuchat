@@ -23,11 +23,33 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn } = useSupabaseAuth();
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const { signIn, resendVerificationEmail, validateEmailDomain } = useSupabaseAuth();
+
+  const validateEmail = (email: string) => {
+    if (!email.trim()) return 'Email is required';
+    
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return 'Invalid email format';
+    
+    // Domain validation
+    if (!validateEmailDomain(email)) {
+      return 'Only @mail.utdt.edu email addresses are allowed';
+    }
+    
+    return null;
+  };
 
   const handleSignIn = async () => {
-    if (!email.trim()) {
-      setError('Email is required');
+    // Reset states
+    setError(null);
+    setNeedsVerification(false);
+    
+    // Validate email
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setError(emailError);
       return;
     }
     
@@ -37,16 +59,46 @@ export default function SignIn() {
     }
     
     setIsLoading(true);
-    setError(null);
     
     try {
       const { error: signInError } = await signIn(email, password);
+      
       if (signInError) {
+        // Check for verification error
+        if (signInError.message.includes('Email not confirmed')) {
+          setNeedsVerification(true);
+        }
         throw signInError;
       }
-      router.replace('/(tabs)');
+      
+      // If we get here, signIn was successful and should redirect
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email) {
+      setError('Please enter your email address');
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { error } = await resendVerificationEmail(email);
+      if (error) throw error;
+      
+      // Navigate to verification screen
+      router.push({
+        pathname: '/auth/verify',
+        params: { email }
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend verification email');
     } finally {
       setIsLoading(false);
     }
@@ -80,11 +132,12 @@ export default function SignIn() {
             <AppIcon name="mail" size={20} color="#666" outline={true} />
             <TextInput
               style={styles.input}
-              placeholder="Email"
+              placeholder="Email (@mail.utdt.edu)"
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
                 setError(null);
+                setNeedsVerification(false);
               }}
               autoCapitalize="none"
               keyboardType="email-address"
@@ -131,6 +184,18 @@ export default function SignIn() {
               <Text style={styles.buttonText}>Sign In</Text>
             )}
           </Pressable>
+
+          {needsVerification && (
+            <Pressable 
+              style={styles.verificationButton} 
+              onPress={handleResendVerification}
+              disabled={isLoading}
+            >
+              <Text style={styles.verificationButtonText}>
+                Resend Verification Email
+              </Text>
+            </Pressable>
+          )}
 
           <Link href="/auth/sign-up" style={styles.link}>
             <Text style={styles.linkText}>Don't have an account? <Text style={styles.linkTextBold}>Sign up</Text></Text>
@@ -258,6 +323,18 @@ const styles = StyleSheet.create({
   },
   linkTextBold: {
     color: ACCENT_COLOR,
+    fontWeight: '600',
+  },
+  verificationButton: {
+    backgroundColor: '#F3E8FF',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  verificationButtonText: {
+    color: ACCENT_COLOR,
+    fontSize: 14,
     fontWeight: '600',
   },
 });

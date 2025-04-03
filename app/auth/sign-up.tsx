@@ -24,45 +24,59 @@ export default function SignUp() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signUp } = useSupabaseAuth();
+  const { signUp, validateEmailDomain } = useSupabaseAuth();
+
+  // Validate email format with domain restriction
+  const validateEmail = (email: string) => {
+    if (!email.trim()) return 'Email is required';
+    
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return 'Invalid email format';
+    
+    // Domain validation
+    if (!validateEmailDomain(email)) {
+      return 'Only @mail.utdt.edu email addresses are allowed';
+    }
+    
+    return null;
+  };
+
+  // Validate password
+  const validatePassword = (password: string, confirmPassword: string) => {
+    if (!password) return 'Password is required';
+    if (password.length < 6) return 'Password must be at least 6 characters';
+    if (password !== confirmPassword) return 'Passwords do not match';
+    return null;
+  };
 
   const handleSignUp = async () => {
-    if (!email.trim()) {
-      setError('Email is required');
+    // Reset previous states
+    setError(null);
+    
+    // Validate email and password
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setError(emailError);
       return;
     }
     
-    if (!password) {
-      setError('Password is required');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-    
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    const passwordError = validatePassword(password, confirmPassword);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     
     setIsLoading(true);
-    setError(null);
     
     try {
       const { error: signUpError } = await signUp(email, password);
+      
       if (signUpError) {
         throw signUpError;
       }
       
-      // On web, we need to sign in after sign up
-      if (Platform.OS === 'web') {
-        router.replace('/(tabs)');
-      } else {
-        // On mobile, we'll show a success message
-        router.replace('/auth/sign-in');
-      }
+      // The signUp function will handle the redirection to verification page
     } catch (err: any) {
       setError(err.message || 'Failed to sign up');
     } finally {
@@ -98,7 +112,7 @@ export default function SignUp() {
             <AppIcon name="mail" size={20} color="#666" outline={true} />
             <TextInput
               style={styles.input}
-              placeholder="Email"
+              placeholder="Email (must be @mail.utdt.edu)"
               value={email}
               onChangeText={(text) => {
                 setEmail(text);

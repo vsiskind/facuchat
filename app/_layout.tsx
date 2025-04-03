@@ -56,12 +56,12 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen 
           name="(tabs)" 
-          redirect={!session}
+          redirect={!session || (session.user && !session.user.email_confirmed_at)}
         />
         <Stack.Screen 
           name="auth" 
           options={{ headerShown: false }} 
-          redirect={!!session}
+          redirect={!!session && session.user?.email_confirmed_at !== null}
         />
         <Stack.Screen name="+not-found" />
       </Stack>

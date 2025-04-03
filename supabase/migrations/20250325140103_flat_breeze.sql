@@ -1,28 +1,16 @@
 /*
-  # Add comments schema with identities and votes
+  # Consolidated Comment Votes and Identities
 
-  1. New Tables
-    - `comment_identities`
-      - `id` (uuid, primary key)
-      - `comment_id` (uuid, references comments.id)
-      - `username` (text)
-      - `avatar_url` (text, nullable)
-      - `created_at` (timestamp)
-    
-    - `comment_votes`
-      - `id` (uuid, primary key)
-      - `comment_id` (uuid, references comments.id)
-      - `user_id` (uuid, references profiles.id)
-      - `vote_type` (text, either 'up' or 'down')
-      - `created_at` (timestamp)
+  1. Purpose
+    - Consolidate duplicated comment votes and identities tables
+    - Ensure proper foreign key constraints with ON DELETE CASCADE
+    - Maintain all security policies
 
-  2. Security
-    - Enable RLS on all new tables
-    - Add policies for authenticated users to:
-      - View comment identities and votes
-      - Create identities for their own comments
-      - Vote on comments
-      - Delete their own votes
+  2. Changes
+    - Create comment_votes table with proper constraints
+    - Create comment_identities table with proper constraints
+    - Apply RLS (Row Level Security) to both tables
+    - Add appropriate policies for data access
 */
 
 -- Create comment_identities table if it doesn't exist
@@ -48,7 +36,7 @@ CREATE TABLE IF NOT EXISTS comment_votes (
 ALTER TABLE comment_identities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE comment_votes ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies if they exist
+-- Drop existing policies if they exist to avoid duplicates
 DO $$ 
 BEGIN
     DROP POLICY IF EXISTS "Comment identities are viewable by everyone" ON comment_identities;
@@ -103,3 +91,6 @@ CREATE POLICY "Users can delete their own votes"
   FOR DELETE
   TO authenticated
   USING (auth.uid() = user_id);
+
+-- Note: This migration consolidates and replaces the overlapping migrations:
+-- 20250305151757_odd_rice.sql and 20250306123318_light_mode.sql

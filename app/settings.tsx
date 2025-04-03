@@ -54,36 +54,32 @@ export default function SettingsScreen() {
   const confirmDeleteAccount = async () => {
     setIsDeletingAccount(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // Call the stored procedure we created to handle account deletion
+      const { error } = await supabase.rpc('delete_user_account');
       
-      if (!user) {
-        throw new Error('User not authenticated');
-      }
+      if (error) throw error;
       
-      // First delete the user's posts, comments, and profile data
-      // This will cascade to all related entities due to foreign key constraints
-      const { error: deleteError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', user.id);
-        
-      if (deleteError) throw deleteError;
-      
-      // Now delete the user's auth account
-      const { error: authError } = await supabase.auth.admin.deleteUser(user.id);
-      
-      if (authError) throw authError;
-      
-      // Sign out and redirect to sign in
+      // Sign out after successful deletion
       await supabase.auth.signOut();
-      router.replace('/auth/sign-in');
       
+      // Show success message
+      Alert.alert(
+        'Account Deleted',
+        'Your account has been successfully deleted.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/auth/sign-in')
+          }
+        ]
+      );
     } catch (err: any) {
       Alert.alert(
         'Error', 
         'Failed to delete account. Please try again or contact support.' +
         (err.message ? `\n\nError: ${err.message}` : '')
       );
+      console.error('Error deleting account:', err);
     } finally {
       setIsDeletingAccount(false);
     }

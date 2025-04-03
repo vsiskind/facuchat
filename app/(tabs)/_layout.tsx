@@ -1,11 +1,32 @@
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 import { AppIcon } from '../../components/AppIcon';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
+import { router } from 'expo-router';
 
 const ACCENT_COLOR = '#7C3AED';
 
 export default function TabLayout() {
+  const { session } = useSupabaseAuth();
+  
+  // Add verification check when tab layout is mounted
+  useEffect(() => {
+    // Ensure the user is authenticated and has a confirmed email
+    if (session?.user && !session.user.email_confirmed_at) {
+      console.log('User in tabs with unverified email, redirecting to verification');
+      router.replace({
+        pathname: '/auth/verify',
+        params: { email: session.user.email || '' }
+      });
+    }
+  }, [session]);
+
+  // If user isn't authenticated or email isn't verified, don't render tabs
+  if (!session?.user || !session.user.email_confirmed_at) {
+    return null;
+  }
+
   return (
     <Tabs
       screenOptions={{
