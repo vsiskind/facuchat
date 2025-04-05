@@ -94,7 +94,7 @@ export function useSupabaseAuth() {
         };
       }
 
-      // Generate profile data
+      // Generate profile data (will be stored in metadata)
       const username = generateRandomUsername();
       const avatarUrl = getRandomAvatarUrl();
 
@@ -106,7 +106,7 @@ export function useSupabaseAuth() {
       const options: any = {
         emailRedirectTo: redirectTo,
         data: {
-          // Additional user metadata for profile creation
+          // Store profile data in metadata for server-side profile creation
           requested_username: username,
           requested_avatar: avatarUrl
         }
@@ -127,38 +127,13 @@ export function useSupabaseAuth() {
       
       console.log('Sign up response:', data);
 
-      try {
-        // Create profile for the user if signup was successful
-        if (data.user) {
-          // Create the profile in the profiles table
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-              {
-                id: data.user.id,
-                username,
-                avatar_url: avatarUrl
-              }
-            ]);
-
-          if (profileError) {
-            console.error('Error creating user profile:', profileError);
-            // Log error but continue since auth was successful
-          }
-        }
-      } catch (profileErr) {
-        console.error('Profile creation error:', profileErr);
-        // Continue with verification flow even if profile creation fails
-      }
-      
-      // CRITICAL: ALWAYS redirect to verification screen after signup regardless of profile creation
+      // Redirect to verification screen if signup was successful
       console.log('Redirecting to verification screen with email:', email);
       router.replace({
         pathname: '/auth/verify',
         params: { email }
       });
       
-      // Return user creation status for UI handling
       return { 
         data: {
           user: data.user,

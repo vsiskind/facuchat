@@ -18,6 +18,7 @@ import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
 
 const ACCENT_COLOR = '#7C3AED';
 const HEADER_BG_COLOR = '#6B21A8';
+const COOLDOWN_PERIOD = 65; // Increased to 65 seconds to be safe with Supabase's 60-second limit
 
 export default function VerifyEmailScreen() {
   const params = useLocalSearchParams();
@@ -27,6 +28,9 @@ export default function VerifyEmailScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const { verifyOTP, resendVerificationEmail } = useSupabaseAuth();
+  
+  // Track if a resend is in progress
+  const [isResending, setIsResending] = useState(false);
   
   // Create refs for each input field
   const inputRefs = useRef<Array<TextInput | null>>([]);
@@ -50,10 +54,10 @@ export default function VerifyEmailScreen() {
         if (session?.user?.email_confirmed_at && session.user.email === email) {
           console.log('Email already verified, redirecting to app');
           router.replace('/(tabs)');
-        } else if (email && resendCooldown === 0) {
+        } else if (email && resendCooldown === 0 && !isResending) {
           // Otherwise, send a verification email if needed
           console.log('Email not verified yet, sending verification email');
-          handleResendCode();
+          handleResendCode(true); // Pass silent=true for initial send
         }
       } catch (err) {
         console.error('Error checking verification status:', err);
@@ -145,31 +149,53 @@ export default function VerifyEmailScreen() {
   };
   
   // Resend verification email
-  const handleResendCode = async () => {
-    if (resendCooldown > 0) return;
+  const handleResendCode = async (silent = false) => {
+    if (resendCooldown > 0 || isResending) return;
     
-    setIsLoading(true);
-    setError(null);
+    setIsResending(true);
+    if (!silent) {
+      setIsLoading(true);
+      setError(null);
+    }
     
     try {
       console.log(`Resending verification email to: ${email}`);
       const { error } = await resendVerificationEmail(email);
       
       if (error) {
-        console.error('Error resending code:', error);
-        throw error;
+        // Check for rate limit error
+        if (error.message && error.message.includes('security purposes') && error.message.includes('after')) {
+          // Extract remaining time if available
+          const timeMatch = error.message.match(/after (\d+) seconds/);
+          const remainingTime = timeMatch && timeMatch[1] ? parseInt(timeMatch[1], 10) : COOLDOWN_PERIOD;
+          
+          setResendCooldown(remainingTime);
+          if (!silent) {
+            setError(`Please wait ${remainingTime} seconds before requesting another code.`);
+          }
+        } else {
+          throw error;
+        }
+      } else {
+        console.log('Verification email sent successfully');
+        
+        // Set cooldown timer for full period
+        setResendCooldown(COOLDOWN_PERIOD);
+        
+        if (!silent) {
+          Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
+        }
       }
-      
-      console.log('Verification email sent successfully');
-      
-      // Set cooldown timer for 60 seconds
-      setResendCooldown(60);
-      Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
     } catch (err: any) {
       console.error('Resend error:', err);
-      setError(err.message || 'Failed to resend verification code');
+      if (!silent) {
+        setError(err.message || 'Failed to resend verification code');
+      }
     } finally {
-      setIsLoading(false);
+      setIsResending(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
   
@@ -235,16 +261,17 @@ export default function VerifyEmailScreen() {
           <View style={styles.resendContainer}>
             <Text style={styles.resendText}>Didn't receive the code?</Text>
             <Pressable
-              onPress={handleResendCode}
-              disabled={resendCooldown > 0 || isLoading}
+              onPress={() => handleResendCode(false)}
+              disabled={resendCooldown > 0 || isLoading || isResending}
             >
               <Text style={[
                 styles.resendButton,
-                (resendCooldown > 0 || isLoading) && styles.resendButtonDisabled
+                (resendCooldown > 0 || isLoading || isResending) && styles.resendButtonDisabled
               ]}>
-                {resendCooldown > 0 
-                  ? `Resend in ${resendCooldown}s` 
-                  : 'Resend Code'}
+                {isResending ? 'Sending...' : 
+                  resendCooldown > 0 
+                    ? `Resend in ${resendCooldown}s` 
+                    : 'Resend Code'}
               </Text>
             </Pressable>
           </View>
