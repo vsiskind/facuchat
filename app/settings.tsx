@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { 
+import { useState, useEffect } from 'react';
+import {
   View, 
   Text, 
   StyleSheet, 
   Pressable, 
   ActivityIndicator, 
   Alert, 
-  ScrollView 
+  ScrollView
 } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -19,18 +19,33 @@ const DANGER_COLOR = '#EF4444';
 export default function SettingsScreen() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [signOutTriggered, setSignOutTriggered] = useState(false);
+
+  // Effect for handling sign out navigation
+  useEffect(() => {
+    if (signOutTriggered) {
+      // Navigate immediately when sign out is triggered
+      router.replace('/auth/sign-in');
+      setSignOutTriggered(false);
+    }
+  }, [signOutTriggered]);
 
   const handleSignOut = async () => {
+    if (isSigningOut) return; // Prevent multiple clicks
+    
     setIsSigningOut(true);
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      router.replace('/auth/sign-in');
+      
+      // Set the trigger for navigation instead of navigating directly
+      setSignOutTriggered(true);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to sign out');
-    } finally {
       setIsSigningOut(false);
     }
+    // We don't reset isSigningOut in the finally block because we want
+    // to keep the button disabled until navigation completes
   };
 
   const handleDeleteAccount = async () => {
@@ -85,16 +100,13 @@ export default function SettingsScreen() {
     }
   };
 
-  const navigateBack = () => {
-    router.back();
-  };
-
+  // Main settings view
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Pressable 
-            onPress={navigateBack} 
+            onPress={() => router.back()} 
             style={styles.backButton}
           >
             <AppIcon name="arrow-back" size={24} color="#FFFFFF" outline={true} />
@@ -108,6 +120,28 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Account Settings</Text>
         
         <View style={styles.card}>
+          <Pressable
+            style={styles.settingRow}
+            onPress={() => router.push('/settings/change-email')}
+          >
+            <AppIcon name="mail" size={22} color={ACCENT_COLOR} outline={true} />
+            <Text style={styles.settingText}>Change Email</Text>
+            <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
+          </Pressable>
+
+          <View style={styles.divider} />
+          
+          <Pressable 
+            style={styles.settingRow}
+            onPress={() => router.push('/settings/change-password')}
+          >
+            <AppIcon name="key" size={22} color={ACCENT_COLOR} outline={true} />
+            <Text style={styles.settingText}>Change Password</Text>
+            <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
+          </Pressable>
+          
+          <View style={styles.divider} />
+          
           <Pressable 
             style={styles.settingRow}
             onPress={handleSignOut}
@@ -228,5 +262,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 16,
     lineHeight: 20,
-  },
+  }
 });
