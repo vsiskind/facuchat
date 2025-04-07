@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react'; // Added React import
 import {
   View, 
   Text, 
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 16,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'web' ? 16 : 60, // Use platform-aware padding
     backgroundColor: HEADER_BG_COLOR,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',

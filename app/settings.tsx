@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // Added React import
 import {
-  View, 
-  Text, 
-  StyleSheet, 
-  Pressable, 
-  ActivityIndicator, 
-  Alert, 
-  ScrollView
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Platform // Added Platform import
 } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -32,12 +33,12 @@ export default function SettingsScreen() {
 
   const handleSignOut = async () => {
     if (isSigningOut) return; // Prevent multiple clicks
-    
+
     setIsSigningOut(true);
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
+
       // Set the trigger for navigation instead of navigating directly
       setSignOutTriggered(true);
     } catch (err: any) {
@@ -71,12 +72,12 @@ export default function SettingsScreen() {
     try {
       // Call the stored procedure we created to handle account deletion
       const { error } = await supabase.rpc('delete_user_account');
-      
+
       if (error) throw error;
-      
+
       // Sign out after successful deletion
       await supabase.auth.signOut();
-      
+
       // Show success message
       Alert.alert(
         'Account Deleted',
@@ -90,7 +91,7 @@ export default function SettingsScreen() {
       );
     } catch (err: any) {
       Alert.alert(
-        'Error', 
+        'Error',
         'Failed to delete account. Please try again or contact support.' +
         (err.message ? `\n\nError: ${err.message}` : '')
       );
@@ -105,8 +106,8 @@ export default function SettingsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Pressable 
-            onPress={() => router.back()} 
+          <Pressable
+            onPress={() => router.back()}
             style={styles.backButton}
           >
             <AppIcon name="arrow-back" size={24} color="#FFFFFF" outline={true} />
@@ -115,10 +116,10 @@ export default function SettingsScreen() {
           <View style={{ width: 24 }} />
         </View>
       </View>
-      
+
       <ScrollView style={styles.content}>
         <Text style={styles.sectionTitle}>Account Settings</Text>
-        
+
         <View style={styles.card}>
           <Pressable
             style={styles.settingRow}
@@ -130,8 +131,8 @@ export default function SettingsScreen() {
           </Pressable>
 
           <View style={styles.divider} />
-          
-          <Pressable 
+
+          <Pressable
             style={styles.settingRow}
             onPress={() => router.push('/settings/change-password')}
           >
@@ -139,10 +140,10 @@ export default function SettingsScreen() {
             <Text style={styles.settingText}>Change Password</Text>
             <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
           </Pressable>
-          
+
           <View style={styles.divider} />
-          
-          <Pressable 
+
+          <Pressable
             style={styles.settingRow}
             onPress={handleSignOut}
             disabled={isSigningOut}
@@ -155,10 +156,10 @@ export default function SettingsScreen() {
             <Text style={styles.settingText}>Sign Out</Text>
             <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
           </Pressable>
-          
+
           <View style={styles.divider} />
-          
-          <Pressable 
+
+          <Pressable
             style={styles.settingRow}
             onPress={handleDeleteAccount}
             disabled={isDeletingAccount}
@@ -172,9 +173,9 @@ export default function SettingsScreen() {
             <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
           </Pressable>
         </View>
-        
+
         <Text style={styles.disclaimer}>
-          Deleting your account will permanently remove all your posts, comments, votes, 
+          Deleting your account will permanently remove all your posts, comments, votes,
           and profile information. This action cannot be undone.
         </Text>
       </ScrollView>
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 16,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'web' ? 16 : 60, // Use platform-aware padding
     backgroundColor: HEADER_BG_COLOR,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
@@ -232,6 +233,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    // Add width constraints
+    maxWidth: 400,
+    alignSelf: 'center',
+    width: '100%',
   },
   settingRow: {
     flexDirection: 'row',

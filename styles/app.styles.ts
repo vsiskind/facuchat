@@ -79,7 +79,7 @@ export const createStyles = StyleSheet.create({
   },
   header: {
     padding: 16,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'web' ? 16 : 60,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
     backgroundColor: HEADER_BG_COLOR,
@@ -92,6 +92,9 @@ export const createStyles = StyleSheet.create({
   content: {
     padding: 16,
     flex: 1,
+    maxWidth: 400,
+    alignSelf: 'center',
+    width: '100%', // Ensure it takes available width up to maxWidth
   },
   previewCard: {
     flexDirection: 'row',
@@ -476,7 +479,7 @@ export const profileStyles = StyleSheet.create({
   },
   header: {
     padding: 16,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'web' ? 16 : 60,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
     backgroundColor: HEADER_BG_COLOR,

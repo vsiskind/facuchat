@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react'; // Added React import
 import { 
   View, 
   Text, 
@@ -235,6 +235,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    // Add width constraints
+    maxWidth: 400,
+    alignSelf: 'center',
+    width: '100%',
   },
   title: {
     fontSize: 24,
