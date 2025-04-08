@@ -73,22 +73,33 @@ export function useSupabaseAuth() {
   }, []);
 
   /**
-   * Validates if an email is from the allowed domain
+   * Validates if an email is from the allowed domain for a given school.
    * @param email Email address to validate
-   * @returns Boolean indicating if email is valid
+   * @param school School identifier (e.g., 'utdt')
+   * @returns Boolean indicating if email is valid for the school
    */
-  const validateEmailDomain = (email: string): boolean => {
-    if (!email) return false;
-    return email.toLowerCase().endsWith('@mail.utdt.edu');
+  const validateEmailDomain = (email: string, school: string | null): boolean => {
+    if (!email || !school) return false;
+    // Simple mapping for now, can be expanded later
+    if (school === 'utdt') {
+      return email.toLowerCase().endsWith('@mail.utdt.edu');
+    }
+    // Add other schools here
+    // else if (school === 'another_school') {
+    //   return email.toLowerCase().endsWith('@mail.another_school.edu');
+    // }
+    return false; // Default to false if school not recognized
   };
 
-  const signUp = async (email: string, password: string) => {
+  // Add 'school' parameter
+  const signUp = async (email: string, password: string, school: string) => {
     try {
-      // Client-side validation of email domain
-      if (!validateEmailDomain(email)) {
+      // Client-side validation of email domain using the school parameter
+      if (!validateEmailDomain(email, school)) {
+        // Make error message slightly more generic if needed, or keep specific for now
         return {
           error: {
-            message: 'Only @mail.utdt.edu email addresses are allowed to register'
+            message: 'Only allowed university email addresses are permitted for registration' // Updated message
           },
           data: null
         };
@@ -152,14 +163,24 @@ export function useSupabaseAuth() {
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  // Add 'school' parameter (but validation removed from this specific function)
+  const signIn = async (email: string, password: string, school: string | null = null) => { // Made school optional, default null
     try {
-      // Client-side validation of email domain
-      if (!validateEmailDomain(email)) {
+      // Removed client-side domain validation for sign-in.
+      // Validation primarily happens during sign-up.
+      // The 'school' parameter is kept for potential future use but not used for validation here.
+
+      // Basic check if email is provided
+      if (!email) {
         return {
-          error: {
-            message: 'Only @mail.utdt.edu email addresses are allowed'
-          },
+          error: { message: 'Email is required' },
+          data: null
+        };
+      }
+      // Basic check if password is provided
+      if (!password) {
+        return {
+          error: { message: 'Password is required' },
           data: null
         };
       }
@@ -261,12 +282,13 @@ export function useSupabaseAuth() {
     }
   };
 
-  const resendVerificationEmail = async (email: string) => {
+  // Add 'school' parameter
+  const resendVerificationEmail = async (email: string, school: string) => {
     try {
-      if (!validateEmailDomain(email)) {
+      if (!validateEmailDomain(email, school)) {
         return {
           error: {
-            message: 'Only @mail.utdt.edu email addresses are allowed'
+            message: 'Only allowed university email addresses are permitted' // Updated message
           }
         };
       }

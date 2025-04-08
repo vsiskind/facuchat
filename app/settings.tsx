@@ -85,7 +85,8 @@ export default function SettingsScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.replace('/auth/sign-in')
+            // Redirect to the school select/onboarding start page
+            onPress: () => router.replace('/(onboarding)') // Corrected path format
           }
         ]
       );

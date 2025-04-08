@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  TouchableWithoutFeedback, // Import TouchableWithoutFeedback
+  Keyboard, // Import Keyboard
 } from 'react-native';
 import { generateRandomUsername, getRandomAvatarUrl } from '../utils/anonymous';
 import { supabase } from '../../lib/supabase';
@@ -82,13 +84,16 @@ export default function CreatePostScreen() {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={createStyles.container}>
-      <View style={createStyles.header}>
-        <Text style={createStyles.title}>Create Post</Text>
-      </View>
-      <View style={createStyles.content}>
-        <View style={createStyles.previewCard}>
-          <Image source={{ uri: postAvatar }} style={createStyles.avatar} />
-          <View style={createStyles.previewInfo}>
+      {/* Wrap content area with TouchableWithoutFeedback */}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={{ flex: 1 }}> {/* Added a flex: 1 View to ensure the touchable area covers the screen */}
+          <View style={createStyles.header}>
+            <Text style={createStyles.title}>Create Post</Text>
+          </View>
+          <View style={createStyles.content}>
+            <View style={createStyles.previewCard}>
+              <Image source={{ uri: postAvatar }} style={createStyles.avatar} />
+              <View style={createStyles.previewInfo}>
             <Text style={createStyles.previewUsername}>{postUsername}</Text>
             <Text style={createStyles.previewNote}>Your anonymous identity for this post</Text>
           </View>
@@ -108,13 +113,13 @@ export default function CreatePostScreen() {
           onPress={handleCreatePost}>
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={[createStyles.buttonText, !content && createStyles.buttonTextDisabled]}>
-              Post Anonymously
-            </Text>
-          )}
-        </Pressable>
-      </View>
+           ) : (
+            <Text style={[createStyles.buttonText, !content && createStyles.buttonTextDisabled]}>Post Anonymously</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }

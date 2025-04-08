@@ -1,22 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
-import { AppIcon, IconName } from './AppIcon'; // Import IconName
+import { AppIcon } from './AppIcon'; // Assuming AppIcon is used for chevron
 
-export type SortOption = {
-  id: string;
+// Define the structure for a school option
+export type SchoolOption = {
   label: string;
-  icon: IconName; // Use IconName type here
-  description: string;
+  value: string;
 };
 
-interface SortDropdownProps {
-  options: SortOption[];
-  selectedOption: SortOption;
-  onSelect: (option: SortOption) => void;
+interface SchoolPickerProps {
+  options: SchoolOption[];
+  selectedSchool: string | null; // Can be null initially
+  onSelect: (value: string) => void;
+  placeholder?: string;
 }
 
-export function SortDropdown({ options, selectedOption, onSelect }: SortDropdownProps) {
+export function SchoolPicker({
+  options,
+  selectedSchool,
+  onSelect,
+  placeholder = 'Select your school...',
+}: SchoolPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<View>(null);
 
@@ -34,7 +39,10 @@ export function SortDropdown({ options, selectedOption, onSelect }: SortDropdown
     };
   });
 
-  // Close dropdown when clicking outside
+  // Find the label for the currently selected school value
+  const selectedLabel = options.find(option => option.value === selectedSchool)?.label || placeholder;
+
+  // Close dropdown when clicking outside (Web only)
   useEffect(() => {
     if (Platform.OS === 'web') {
       const handleClickOutside = (event: MouseEvent) => {
@@ -42,7 +50,6 @@ export function SortDropdown({ options, selectedOption, onSelect }: SortDropdown
           setIsOpen(false);
         }
       };
-
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
@@ -54,14 +61,15 @@ export function SortDropdown({ options, selectedOption, onSelect }: SortDropdown
         style={styles.trigger}
         onPress={() => setIsOpen(!isOpen)}
       >
-        {/* Use optional chaining for safety (remove 'as any') */}
-        <AppIcon name={selectedOption?.icon} size={20} color="#666" outline={true} />
-        <Text style={styles.triggerText}>{selectedOption?.label}</Text>
+        {/* Display selected label or placeholder */}
+        <Text style={[styles.triggerText, !selectedSchool && styles.placeholderText]}>
+          {selectedLabel}
+        </Text>
         <AppIcon
           name={isOpen ? "chevron-up" : "chevron-down"}
           size={20}
-          color="#666" 
-          outline={true} 
+          color="#666"
+          outline={true}
         />
       </Pressable>
 
@@ -71,34 +79,24 @@ export function SortDropdown({ options, selectedOption, onSelect }: SortDropdown
         <View style={styles.dropdownContent}>
           {options.map((option) => (
             <Pressable
-              key={option.id}
+              key={option.value}
               style={[
                 styles.option,
-                selectedOption.id === option.id && styles.optionSelected
+                selectedSchool === option.value && styles.optionSelected
               ]}
               onPress={() => {
-                onSelect(option);
+                onSelect(option.value);
                 setIsOpen(false);
               }}
             >
-              <View style={styles.optionContent}>
-                <View style={styles.optionHeader}>
-                  <AppIcon 
-                    name={option.icon} 
-                    size={20} 
-                    color={selectedOption.id === option.id ? '#7C3AED' : '#666'} 
-                    outline={selectedOption.id !== option.id} 
-                  />
-                  <Text style={[
-                    styles.optionLabel,
-                    selectedOption.id === option.id && styles.optionLabelSelected
-                  ]}>
-                    {option.label}
-                  </Text>
-                </View>
-                <Text style={styles.optionDescription}>{option.description}</Text>
-              </View>
-              {selectedOption.id === option.id && (
+              {/* Simplified option display */}
+              <Text style={[
+                styles.optionLabel,
+                selectedSchool === option.value && styles.optionLabelSelected
+              ]}>
+                {option.label}
+              </Text>
+              {selectedSchool === option.value && (
                 <AppIcon name="checkmark" size={20} color="#7C3AED" outline={false} />
               )}
             </Pressable>
@@ -109,31 +107,32 @@ export function SortDropdown({ options, selectedOption, onSelect }: SortDropdown
   );
 }
 
+// Styles adapted from SortDropdown, simplified for school picker
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
     zIndex: 1000,
+    width: '100%', // Make picker take full width
+    marginBottom: 30, // Add margin like the original picker
   },
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between', // Space out text and icon
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 15, // Increased padding
+    paddingVertical: 12, // Increased padding
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1, // Add border like original input
+    borderColor: '#E0E0E0', // Border color like original
+    minHeight: 50, // Ensure consistent height
   },
   triggerText: {
-    fontSize: 14,
-    color: '#666',
-    marginHorizontal: 8,
+    fontSize: 16, // Match original input font size
+    color: '#1A1A1A', // Match original input text color
+  },
+  placeholderText: {
+    color: '#999999', // Placeholder color
   },
   dropdown: {
     position: 'absolute',
@@ -141,61 +140,44 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     marginTop: 4,
-    backgroundColor: '#FFFFFF', // Keep background for shadow/border visibility
-    borderRadius: 12,
-    // padding: 8, // Moved to dropdownContent
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12, // Slightly larger radius
+    padding: 8,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, // Slightly increased shadow
+    shadowRadius: 6,
     elevation: 5,
-    ...Platform.select({
-      web: {
-        minWidth: 280,
-      },
-    }),
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    // Remove padding from the animated container
+    // padding: 8, // Moved to dropdownContent
   },
   // Added inner view for padding to avoid animating padding
   dropdownContent: {
     padding: 8,
     backgroundColor: '#FFFFFF', // Ensure background color is set here too
-    borderRadius: 11, // Match outer radius minus border width (if any)
+    borderRadius: 11, // Match outer radius minus border width
     overflow: 'hidden', // Clip content to rounded corners
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
+    paddingVertical: 12, // Consistent padding
+    paddingHorizontal: 15,
     borderRadius: 8,
   },
   optionSelected: {
-    backgroundColor: '#F3E8FF',
-  },
-  optionContent: {
-    flex: 1,
-    marginRight: 12,
-  },
-  optionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
+    backgroundColor: '#F3E8FF', // Highlight color
   },
   optionLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500', // Slightly less bold than SortDropdown
     color: '#1A1A1A',
-    marginLeft: 8,
   },
   optionLabelSelected: {
-    color: '#7C3AED',
-  },
-  optionDescription: {
-    fontSize: 14,
-    color: '#666666',
-    marginLeft: 28,
+    color: '#7C3AED', // Primary color for selected
+    fontWeight: '600', // Make selected slightly bolder
   },
 });

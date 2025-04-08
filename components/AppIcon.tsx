@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 // Define the icon names and their platform-specific variants
-type IconName = 
+export type IconName = // Add export keyword here
   | 'home'
   | 'add-circle'
   | 'person'
@@ -26,7 +26,15 @@ type IconName =
   | 'chatbubble-ellipses'
   | 'refresh'
   | 'trash'
-  | 'arrow-up';
+  | 'arrow-up'
+  | 'arrow-back'
+  | 'chevron-forward'
+  | 'key'
+  | 'log-out'
+  // Icons used in SortDropdown
+  | 'time' 
+  | 'flame' 
+  | 'checkmark';
 
 interface AppIconProps {
   name: IconName;

@@ -6,18 +6,20 @@ import {
   Pressable, 
   StyleSheet, 
   KeyboardAvoidingView, 
-  Platform,
+  Platform, // Keep Platform import
   ActivityIndicator,
-  ScrollView
+  ScrollView,
 } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router'; // Import useLocalSearchParams
 import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
 import { AppIcon } from '../../components/AppIcon';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; // Re-add SafeAreaView and add useSafeAreaInsets
 
 const ACCENT_COLOR = '#7C3AED';
-const HEADER_BG_COLOR = '#6B21A8'; // Deeper purple for header
+const HEADER_BG_COLOR = '#6B21A8'; // Deeper purple for header (Keep for logo)
 
 export default function SignUp() {
+  const insets = useSafeAreaInsets(); // Get safe area insets
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,18 +27,20 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signUp, validateEmailDomain } = useSupabaseAuth();
+  const { school } = useLocalSearchParams<{ school: string }>(); // Get school param
 
-  // Validate email format with domain restriction
+  // Validate email format with domain restriction using the school param
   const validateEmail = (email: string) => {
     if (!email.trim()) return 'Email is required';
     
     // Basic email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return 'Invalid email format';
-    
-    // Domain validation
-    if (!validateEmailDomain(email)) {
-      return 'Only @mail.utdt.edu email addresses are allowed';
+
+    // Domain validation using the school parameter
+    if (!validateEmailDomain(email, school || null)) { // Pass school to validation
+      // Make error message dynamic or more general if needed
+      return `Only emails from the selected university are allowed`;
     }
     
     return null;
@@ -68,10 +72,11 @@ export default function SignUp() {
     }
     
     setIsLoading(true);
-    
+
     try {
-      const { error: signUpError } = await signUp(email, password);
-      
+      // Pass school to signUp function
+      const { error: signUpError } = await signUp(email, password, school || ''); // Pass school
+
       if (signUpError) {
         throw signUpError;
       }
@@ -87,18 +92,33 @@ export default function SignUp() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <AppIcon name="chatbubble-ellipses" size={48} color="#FFFFFF" outline={false} />
+      style={styles.container}
+    >
+      {/* Use SafeAreaView for inset handling */}
+      <SafeAreaView style={styles.safeArea}> 
+        {/* Simple Back Button positioned using insets */}
+        <Pressable 
+          onPress={() => router.back()} // Use router.back() for correct animation
+          // Apply top inset to position button correctly
+          style={[styles.backButton, { top: insets.top + 10 }]} 
+        >
+          {/* Use a visible color against the background */}
+          <AppIcon name="arrow-back" size={24} color="#333" outline={true} /> 
+        </Pressable>
+
+        {/* ScrollView remains inside SafeAreaView */}
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Logo section remains */}
+          <View style={styles.logoContainer}>
+            <View style={styles.logoCircle}>
+              <AppIcon name="chatbubble-ellipses" size={48} color="#FFFFFF" outline={false} />
+            </View>
+            <Text style={styles.appName}>Campus Connect</Text>
+            <Text style={styles.tagline}>Share anonymously with your campus community</Text>
           </View>
-          <Text style={styles.appName}>Campus Connect</Text>
-          <Text style={styles.tagline}>Share anonymously with your campus community</Text>
-        </View>
-        
-        <View style={styles.card}>
-          <Text style={styles.title}>Create Account</Text>
+
+          <View style={styles.card}>
+            <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Join the campus community</Text>
 
           {error && (
@@ -183,8 +203,9 @@ export default function SignUp() {
           <Link href="/auth/sign-in" style={styles.link}>
             <Text style={styles.linkText}>Already have an account? <Text style={styles.linkTextBold}>Sign in</Text></Text>
           </Link>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </SafeAreaView> 
     </KeyboardAvoidingView>
   );
 }
@@ -194,10 +215,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F6F8FA',
   },
-  scrollContent: {
+  safeArea: { // Re-add SafeArea style
+    flex: 1,
+  },
+  // Removed header, headerContent, headerTitle styles
+  backButton: { // Simple absolute positioned back button
+    position: 'absolute',
+    // top is now set dynamically using insets
+    left: 16,
+    zIndex: 10, // Ensure it's above scroll content
+    padding: 8, 
+  },
+  scrollContent: { // Reset padding top
     flexGrow: 1,
+    // paddingTop: 16, // Remove padding added for header
     justifyContent: 'center',
-    padding: 16,
+    padding: 16, // Keep overall padding
   },
   logoContainer: {
     alignItems: 'center',
