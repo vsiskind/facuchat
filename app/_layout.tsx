@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Slot, Stack, SplashScreen, useRouter } from 'expo-router'; // Import useRouter
+import { Slot, Stack, SplashScreen, useRouter, useSegments } from 'expo-router'; // Import useSegments
 import { StatusBar } from 'expo-status-bar';
 import { useSupabaseAuth } from '../hooks/useSupabaseAuth';
 import { View, Text, StyleSheet, TouchableWithoutFeedback, Keyboard } from 'react-native'; // Import TouchableWithoutFeedback and Keyboard
@@ -18,7 +18,8 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   useFrameworkReady();
-  const router = useRouter(); // Initialize router
+  const router = useRouter(); 
+  const segments = useSegments(); // Get current route segments
   const { session, loading: authLoading } = useSupabaseAuth();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
@@ -57,8 +58,12 @@ export default function RootLayout() {
       return;
     }
 
-    const needsOnboarding = hasCompletedOnboarding === false;
+    // Ensure segments are available (basic check)
+    if (!segments) {
+      return; 
+    }
 
+    const needsOnboarding = hasCompletedOnboarding === false;
     // Determine the target route
     let targetRoute: string;
     if (!session) {
@@ -73,12 +78,30 @@ export default function RootLayout() {
       targetRoute = '/(tabs)';
     }
 
-    // Use replace to navigate, preventing back navigation to previous state
-    console.log(`Navigating to: ${targetRoute}`);
-    // Cast targetRoute to any to satisfy typed routes
-    router.replace(targetRoute as any); 
+    // Cast currentGroup to string to potentially bypass strict type checking issues
+    const currentGroup = segments[0] as string; 
 
-  }, [router, session, authLoading, onboardingChecked, hasCompletedOnboarding]);
+    // Redirect logic based on auth state and current location
+    if (!session && currentGroup !== 'auth') {
+      console.log(`Redirecting to Auth: ${targetRoute}`);
+      router.replace(targetRoute as any);
+    } else if (session && !session.user?.email_confirmed_at && currentGroup !== 'auth') {
+      // Redirect to verify if email not confirmed and not already in auth group
+      console.log(`Redirecting to Verify: ${targetRoute}`);
+      router.replace(targetRoute as any);
+    } else if (session && session.user?.email_confirmed_at && needsOnboarding && currentGroup !== '(onboarding)') {
+      // Redirect to onboarding if needed and not already there
+      console.log(`Redirecting to Onboarding: ${targetRoute}`);
+      router.replace(targetRoute as any);
+    } else if (session && session.user?.email_confirmed_at && !needsOnboarding && currentGroup !== '(tabs)' && currentGroup !== 'settings') {
+      // Redirect to main app tabs if authenticated, onboarded, and not already in tabs or settings
+      console.log(`Redirecting to App Tabs: ${targetRoute}`);
+      router.replace(targetRoute as any);
+    } else {
+      console.log(`No redirect needed. Current group: ${currentGroup}, Target logic points to: ${targetRoute}`);
+    }
+
+  }, [router, segments, session, authLoading, onboardingChecked, hasCompletedOnboarding]);
 
 
   // Check for Supabase environment variables

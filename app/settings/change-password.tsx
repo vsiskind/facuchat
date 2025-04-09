@@ -25,6 +25,9 @@ export default function ChangePasswordScreen() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  // State for password visibility
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false); // Controls both New and Confirm New
 
   const handleChangePassword = async () => {
     setPasswordError(null);
@@ -44,15 +47,54 @@ export default function ChangePasswordScreen() {
       setPasswordError("New passwords do not match.");
       return;
     }
-    
     setIsChangingPassword(true);
     try {
-      const { data, error } = await supabase.auth.updateUser({ 
-        password: newPassword 
+      // --- Verification Step ---
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user || !user.email) {
+        setPasswordError("Could not retrieve user information. Please try again.");
+        setIsChangingPassword(false);
+        return;
+      }
+
+      // Attempt to sign in with the current password to verify it
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
       });
-      
-      if (error) {
-        setPasswordError(error.message || "Failed to change password.");
+
+      // IMPORTANT: signInWithPassword might succeed or throw specific errors even if auth is okay (e.g., MFA).
+      // We only care if it's specifically an invalid credentials error.
+      // Supabase might change error messages, so check for common indicators.
+      if (signInError && (signInError.message.includes('Invalid login credentials') || signInError.message.includes('Email not confirmed'))) {
+         // Allow 'Email not confirmed' error because the user is already logged in,
+         // but treat 'Invalid login credentials' as a failure.
+         if (signInError.message.includes('Invalid login credentials')) {
+            setPasswordError("Incorrect current password.");
+            setIsChangingPassword(false);
+            return;
+         }
+         // If it's 'Email not confirmed', we can proceed as the user is authenticated.
+      } else if (signInError) {
+         // Handle other potential sign-in errors if necessary, but for password verification,
+         // non-'invalid credentials' errors usually mean the password was okay at the auth level.
+         // Log unexpected errors for debugging? For now, proceed cautiously.
+         console.warn("Unexpected error during password verification sign-in:", signInError.message);
+         // Depending on strictness, you might want to stop here too:
+         // setPasswordError("An unexpected error occurred during verification.");
+         // setIsChangingPassword(false);
+         // return;
+      }
+      // --- End Verification Step ---
+
+      // If verification passed, update the password
+      const { data, error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) {
+        setPasswordError(updateError.message || "Failed to change password.");
       } else {
         setPasswordSuccess("Password changed successfully!");
         setCurrentPassword('');
@@ -60,10 +102,10 @@ export default function ChangePasswordScreen() {
         setConfirmNewPassword('');
         
         // After a successful password change, show the success message for a few seconds
-        // then go back to the main settings screen
+        // then navigate directly to the main settings screen
         setTimeout(() => {
-          router.back();
-          setPasswordSuccess(null);
+          router.replace('/settings'); // Navigate after delay
+          // Let the message display until navigation completes and component unmounts
         }, 2000);
       }
     } catch (err: any) {
@@ -105,7 +147,7 @@ export default function ChangePasswordScreen() {
             
             {passwordSuccess && (
               <View style={styles.successContainer}>
-                <AppIcon name="checkmark-circle" size={20} color="#10B981" outline={false} />
+                <AppIcon name="checkmark" size={20} color="#10B981" outline={false} />
                 <Text style={styles.successText}>{passwordSuccess}</Text>
               </View>
             )}
@@ -113,32 +155,67 @@ export default function ChangePasswordScreen() {
             <Text style={styles.passwordFormTitle}>Update Your Password</Text>
             <Text style={styles.passwordFormSubtitle}>Enter your current password and choose a new strong password.</Text>
             
-            <TextInput
-              style={styles.input}
-              placeholder="Current Password"
-              secureTextEntry={true}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              placeholderTextColor="#999"
-            />
+            {/* Current Password Input */}
+            <View style={styles.inputContainer}>
+              <AppIcon name="lock-closed" size={20} color="#666" outline={true} />
+              <TextInput
+                style={[styles.input, styles.passwordInput]}
+                placeholder="Current Password"
+                secureTextEntry={!showCurrentPassword}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholderTextColor="#999"
+              />
+              <Pressable 
+                onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                style={styles.eyeIcon}
+              >
+                <AppIcon 
+                  name={showCurrentPassword ? "eye-off" : "eye"} 
+                  size={20} 
+                  color="#666" 
+                  outline={true}
+                />
+              </Pressable>
+            </View>
             
-            <TextInput
-              style={styles.input}
-              placeholder="New Password"
-              secureTextEntry={true}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholderTextColor="#999"
-            />
+            {/* New Password Input */}
+            <View style={styles.inputContainer}>
+              <AppIcon name="lock-closed" size={20} color="#666" outline={true} />
+              <TextInput
+                style={[styles.input, styles.passwordInput]}
+                placeholder="New Password"
+                secureTextEntry={!showNewPassword}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholderTextColor="#999"
+              />
+              <Pressable 
+                onPress={() => setShowNewPassword(!showNewPassword)}
+                style={styles.eyeIcon}
+              >
+                <AppIcon 
+                  name={showNewPassword ? "eye-off" : "eye"} 
+                  size={20} 
+                  color="#666" 
+                  outline={true}
+                />
+              </Pressable>
+            </View>
             
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm New Password"
-              secureTextEntry={true}
-              value={confirmNewPassword}
-              onChangeText={setConfirmNewPassword}
-              placeholderTextColor="#999"
-            />
+            {/* Confirm New Password Input */}
+            <View style={styles.inputContainer}>
+              <AppIcon name="lock-closed" size={20} color="#666" outline={true} />
+              <TextInput
+                style={styles.input} // Removed styles.passwordInput
+                placeholder="Confirm New Password"
+                secureTextEntry={!showNewPassword} // Controlled by showNewPassword state
+                value={confirmNewPassword}
+                onChangeText={setConfirmNewPassword}
+                placeholderTextColor="#999"
+              />
+              {/* Removed Pressable eye icon */}
+            </View>
             
             <Pressable
               style={[
@@ -248,15 +325,30 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  input: {
-    backgroundColor: '#F9FAFB',
+  inputContainer: { // Added from sign-in
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F6F8FA',
+    borderRadius: 12,
+    marginBottom: 16,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+  },
+  input: {
+    flex: 1, // Changed from fixed properties
+    padding: 16, // Kept padding
     fontSize: 16,
     color: '#1A1A1A',
+    // Removed background, border, borderRadius, marginBottom as they are now on inputContainer
+  },
+  passwordInput: { // Added from sign-in
+    paddingRight: 40, // Space for the eye icon
+  },
+  eyeIcon: { // Added from sign-in
+    padding: 8,
+    position: 'absolute',
+    right: 4,
   },
   button: {
     backgroundColor: ACCENT_COLOR,
@@ -265,6 +357,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  // Removed duplicate button style above
   buttonDisabled: {
     backgroundColor: '#D1D5DB',
   },

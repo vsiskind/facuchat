@@ -20,19 +20,20 @@ const ACCENT_COLOR = '#7C3AED';
 const HEADER_BG_COLOR = '#6B21A8';
 
 export default function ChangeEmailScreen() {
-  const [currentEmail, setCurrentEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState(''); // Changed from currentEmail
   const [newEmail, setNewEmail] = useState('');
   const [confirmNewEmail, setConfirmNewEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false); // Added for password visibility
   const { validateEmailDomain } = useSupabaseAuth();
 
   const handleChangeEmail = async () => {
     setEmailError(null);
     setEmailSuccess(null);
 
-    if (!currentEmail || !newEmail || !confirmNewEmail) {
+    if (!currentPassword || !newEmail || !confirmNewEmail) { // Changed from currentEmail
       setEmailError("Please fill in all fields.");
       return;
     }
@@ -43,22 +44,55 @@ export default function ChangeEmailScreen() {
     }
 
     // Validate the email domain
-    if (!validateEmailDomain(newEmail)) {
+    if (!validateEmailDomain(newEmail, 'utdt')) { // Added 'utdt' school argument
       setEmailError("Only @mail.utdt.edu email addresses are allowed.");
       return;
     }
 
     setIsChangingEmail(true);
     try {
-      const { data, error } = await supabase.auth.updateUser({
+      // --- Verification Step ---
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user || !user.email) {
+        setEmailError("Could not retrieve user information. Please try again.");
+        setIsChangingEmail(false);
+        return;
+      }
+
+      // Attempt to sign in with the current password to verify it
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword, // Use the entered password
+      });
+
+      // Handle verification result (similar to change-password)
+      if (signInError && (signInError.message.includes('Invalid login credentials') || signInError.message.includes('Email not confirmed'))) {
+         if (signInError.message.includes('Invalid login credentials')) {
+            setEmailError("Incorrect current password.");
+            setIsChangingEmail(false);
+            return;
+         }
+         // Allow 'Email not confirmed' to proceed
+      } else if (signInError) {
+         console.warn("Unexpected error during password verification sign-in:", signInError.message);
+         // Optionally stop here for unexpected errors
+         // setEmailError("An unexpected error occurred during verification.");
+         // setIsChangingEmail(false);
+         // return;
+      }
+      // --- End Verification Step ---
+
+      // If verification passed, update the email
+      const { data, error: updateError } = await supabase.auth.updateUser({
         email: newEmail,
       });
 
-      if (error) {
-        setEmailError(error.message || "Failed to change email.");
+      if (updateError) {
+        setEmailError(updateError.message || "Failed to change email.");
       } else {
         setEmailSuccess("Email change initiated! Please verify your new email.");
-        setCurrentEmail('');
+        setCurrentPassword(''); // Clear password field
         setNewEmail('');
         setConfirmNewEmail('');
 
@@ -67,9 +101,9 @@ export default function ChangeEmailScreen() {
         setTimeout(() => {
           router.replace({
             pathname: '/auth/verify',
-            params: { email: newEmail }
+            params: { email: newEmail } // Pass the new email for verification screen
           });
-          setEmailSuccess(null);
+          // Keep success message until navigation
         }, 2000);
       }
     } catch (err: any) {
@@ -111,26 +145,42 @@ export default function ChangeEmailScreen() {
 
             {emailSuccess && (
               <View style={styles.successContainer}>
-                <AppIcon name="checkmark-circle" size={20} color="#10B981" outline={false} />
+                <AppIcon name="checkmark" size={20} color="#10B981" outline={false} /> 
                 <Text style={styles.successText}>{emailSuccess}</Text>
               </View>
             )}
 
             <Text style={styles.emailFormTitle}>Update Your Email</Text>
-            <Text style={styles.emailFormSubtitle}>Enter your current email and choose a new email address with the @mail.utdt.edu domain.</Text>
+            <Text style={styles.emailFormSubtitle}>Enter your current password and choose a new email address with the @mail.utdt.edu domain.</Text>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Current Email"
-              value={currentEmail}
-              onChangeText={setCurrentEmail}
-              placeholderTextColor="#999"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            {/* Current Password Input */}
+            <View style={styles.inputContainer}>
+              <AppIcon name="lock-closed" size={20} color="#666" outline={true} />
+              <TextInput
+                style={[styles.input, styles.passwordInput]} // Use password specific styles
+                placeholder="Current Password"
+                secureTextEntry={!showCurrentPassword}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholderTextColor="#999"
+                autoCapitalize="none" // Keep this
+              />
+              <Pressable
+                onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                style={styles.eyeIcon}
+              >
+                <AppIcon
+                  name={showCurrentPassword ? "eye-off" : "eye"}
+                  size={20}
+                  color="#666"
+                  outline={true}
+                />
+              </Pressable>
+            </View>
 
+            {/* New Email Input */}
             <TextInput
-              style={styles.input}
+              style={styles.inputField} // Use a generic input field style
               placeholder="New Email (@mail.utdt.edu)"
               value={newEmail}
               onChangeText={setNewEmail}
@@ -139,11 +189,12 @@ export default function ChangeEmailScreen() {
               autoCapitalize="none"
             />
 
+            {/* Confirm New Email Input */}
             <TextInput
-              style={styles.input}
-              placeholder="Confirm New Email"
-              value={confirmNewEmail}
-              onChangeText={setConfirmNewEmail}
+              style={styles.inputField} // Use a generic input field style
+              placeholder="Confirm New Email" // Corrected placeholder
+              value={confirmNewEmail} // Corrected value
+              onChangeText={setConfirmNewEmail} // Corrected handler
               placeholderTextColor="#999"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -257,7 +308,34 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  input: {
+  // Added from change-password for password input structure
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F6F8FA', // Match background
+    borderRadius: 12,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  input: { // Style for the TextInput within the container
+    flex: 1,
+    paddingVertical: 16, // Adjusted padding
+    paddingHorizontal: 8, // Added horizontal padding
+    fontSize: 16,
+    color: '#1A1A1A',
+  },
+  passwordInput: { // Specific style for password input to make space for icon
+    paddingRight: 40,
+  },
+  eyeIcon: { // Style for the eye icon Pressable
+    padding: 8,
+    position: 'absolute',
+    right: 4,
+  },
+  // Renamed original 'input' style to 'inputField' for non-password fields
+  inputField: {
     backgroundColor: '#F9FAFB',
     borderWidth: 1,
     borderColor: '#E5E7EB',

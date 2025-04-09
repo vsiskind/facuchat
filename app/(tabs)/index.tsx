@@ -45,12 +45,24 @@ const sortOptions: SortOption[] = [
   }
 ];
 
-type Comment = Post['comments'][0] & {
+// Define BaseComment structure first to avoid circular dependency
+type BaseComment = {
+  id: string;
+  content: string;
+  created_at: string;
   parent_comment_id?: string | null;
   depth?: number;
+  author_id?: string;
+  comment_votes?: { vote_type: 'up' | 'down' }[];
+  comment_identities: { username: string; avatar_url: string }[];
+};
+
+// Define Comment with recursive replies
+type Comment = BaseComment & {
   replies?: Comment[];
 };
 
+// Define Post using the Comment type
 type Post = {
   id: string;
   content: string;
@@ -64,22 +76,24 @@ type Post = {
     vote_type: 'up' | 'down';
     user_id: string;
   }[];
-  comments: Comment[];
+  comments: Comment[]; // Use the defined Comment type
 };
 
-function Comment({ 
-  comment, 
-  postId, 
+function Comment({
+  comment,
+  postId,
   onVote,
   onReply,
   onDelete,
-  depth = 0 
-}: { 
+  depth = 0,
+  currentUserId // Added prop
+}: {
   comment: Comment;
   postId: string;
   onVote: (commentId: string, voteType: 'up' | 'down') => void;
   onReply: (parentCommentId: string) => void;
   onDelete: (commentId: string) => void;
+  currentUserId: string | null; // Added prop type
   depth?: number;
 }) {
   const [optimisticVotes, setOptimisticVotes] = useState(0);
@@ -141,9 +155,9 @@ function Comment({
       inputRange: [0, 1],
       outputRange: [100, 0],
     });
-    
+
     return (
-      <Animated.View 
+      <Animated.View
         style={[
           feedStyles.swipeDeleteContainer,
           {
@@ -155,11 +169,11 @@ function Comment({
           onPress={handleDelete}
           style={feedStyles.swipeDeleteButton}
         >
-          <AppIcon 
-            name="trash" 
-            size={24} 
-            color="#FFFFFF" 
-            outline={true} 
+          <AppIcon
+            name="trash"
+            size={24}
+            color="#FFFFFF"
+            outline={true}
           />
         </Pressable>
       </Animated.View>
@@ -169,18 +183,23 @@ function Comment({
   const canReply = depth < 3; // Limit nesting to 3 levels
   const hasReplies = comment.replies && comment.replies.length > 0;
   const replyCount = comment.replies?.length || 0;
-  
+
+  // Check if the current user is the author
+  const isAuthor = currentUserId && comment.author_id === currentUserId;
+
   return (
     <Swipeable
       ref={swipeableRef}
-      renderRightActions={renderRightActions}
+      // Conditionally render swipe actions only if the user is the author
+      renderRightActions={isAuthor ? renderRightActions : undefined}
       rightThreshold={40}
+      overshootRight={false} // Prevent overshooting if not author
     >
       <View style={[feedStyles.comment, { marginLeft: depth * 16 }]}>
         <View style={feedStyles.commentHeader}>
-          <Image 
-            source={{ uri: identity.avatar_url }} 
-            style={feedStyles.commentAvatar} 
+          <Image
+            source={{ uri: identity.avatar_url }}
+            style={feedStyles.commentAvatar}
           />
           <View style={feedStyles.commentAuthorInfo}>
             <Text style={feedStyles.commentUsername}>{identity.username}</Text>
@@ -192,15 +211,15 @@ function Comment({
         <Text style={feedStyles.commentContent}>{comment.content}</Text>
         <View style={feedStyles.commentActions}>
           <View style={feedStyles.commentVotes}>
-            <Pressable 
-              onPress={() => handleVote('up')} 
+            <Pressable
+              onPress={() => handleVote('up')}
               style={[feedStyles.voteButton, userVote === 'up' && feedStyles.voteButtonActive]}
             >
-              <AppIcon 
-                name="arrow-up-circle" 
-                size={20} 
-                color={userVote === 'up' ? '#10B981' : '#666'} 
-                outline={userVote !== 'up'} 
+              <AppIcon
+                name="arrow-up-circle"
+                size={20}
+                color={userVote === 'up' ? '#10B981' : '#666'}
+                outline={userVote !== 'up'}
               />
             </Pressable>
             <Text style={[
@@ -210,39 +229,39 @@ function Comment({
             ]}>
               {optimisticVotes}
             </Text>
-            <Pressable 
-              onPress={() => handleVote('down')} 
+            <Pressable
+              onPress={() => handleVote('down')}
               style={[feedStyles.voteButton, userVote === 'down' && feedStyles.voteButtonActive]}
             >
-              <AppIcon 
-                name="arrow-down-circle" 
-                size={20} 
-                color={userVote === 'down' ? '#EF4444' : '#666'} 
-                outline={userVote !== 'down'} 
+              <AppIcon
+                name="arrow-down-circle"
+                size={20}
+                color={userVote === 'down' ? '#EF4444' : '#666'}
+                outline={userVote !== 'down'}
               />
             </Pressable>
           </View>
-          
+
           {canReply && (
-            <Pressable 
-              style={feedStyles.replyButton} 
+            <Pressable
+              style={feedStyles.replyButton}
               onPress={() => onReply(comment.id)}
             >
               <AppIcon name="chatbubble" size={16} color="#666" outline={true} />
               <Text style={feedStyles.replyButtonText}>Reply</Text>
             </Pressable>
           )}
-          
+
           {hasReplies && (
-            <Pressable 
-              style={feedStyles.toggleRepliesButton} 
+            <Pressable
+              style={feedStyles.toggleRepliesButton}
               onPress={() => setShowReplies(!showReplies)}
             >
-              <AppIcon 
-                name={showReplies ? "chevron-up" : "chevron-down"} 
-                size={16} 
-                color="#666" 
-                outline={true} 
+              <AppIcon
+                name={showReplies ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#666"
+                outline={true}
               />
               <Text style={feedStyles.toggleRepliesText}>
                 {showReplies ? "Hide replies" : `Show ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
@@ -251,7 +270,7 @@ function Comment({
           )}
         </View>
 
-        {hasReplies && showReplies && (
+        {hasReplies && showReplies && comment.replies && ( // Add check for comment.replies
           comment.replies.map(reply => (
             <Comment
               key={reply.id}
@@ -261,6 +280,7 @@ function Comment({
               onReply={onReply}
               onDelete={onDelete}
               depth={depth + 1}
+              currentUserId={currentUserId} // Pass currentUserId down
             />
           ))
         )}
@@ -269,14 +289,14 @@ function Comment({
   );
 }
 
-function CommentsFlyout({ 
-  post, 
-  visible, 
-  onClose, 
-  onRefresh 
-}: { 
-  post: Post; 
-  visible: boolean; 
+function CommentsFlyout({
+  post,
+  visible,
+  onClose,
+  onRefresh
+}: {
+  post: Post;
+  visible: boolean;
   onClose: () => void;
   onRefresh: () => void;
 }) {
@@ -285,15 +305,32 @@ function CommentsFlyout({
   const [commentUsername, setCommentUsername] = useState('');
   const [commentAvatar, setCommentAvatar] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null); // Added state for user ID
 
   const generateNewIdentity = () => {
     setCommentUsername(generateRandomUsername());
     setCommentAvatar(getRandomAvatarUrl());
   };
 
+  // Function to fetch the current user ID
+  const fetchCurrentUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id || null);
+    } catch (error) {
+      console.error("Error fetching current user:", error);
+      setCurrentUserId(null);
+    }
+  };
+
   useEffect(() => {
+    // Fetch user ID when the flyout becomes visible
     if (visible) {
+      fetchCurrentUser();
       generateNewIdentity();
+    } else {
+      // Reset user ID when flyout closes
+      setCurrentUserId(null);
     }
   }, [visible]);
 
@@ -323,17 +360,25 @@ function CommentsFlyout({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Double check authorization on the client side before sending delete request
+      const commentToDelete = post.comments.find(c => c.id === commentId);
+      if (commentToDelete?.author_id !== user.id) {
+         Alert.alert("Error", "You can only delete your own comments.");
+         return;
+      }
+
       const { error } = await supabase
         .from('comments')
         .delete()
         .eq('id', commentId)
-        .eq('author_id', user.id);
+        .eq('author_id', user.id); // Ensure RLS is also enforced
 
       if (error) throw error;
-      
+
       onRefresh();
     } catch (error) {
       console.error('Error deleting comment:', error);
+      Alert.alert("Error", "Could not delete comment.");
     }
   };
 
@@ -377,6 +422,7 @@ function CommentsFlyout({
       onRefresh();
     } catch (error) {
       console.error('Error creating comment:', error);
+      Alert.alert("Error", "Could not post comment.");
     } finally {
       setIsSubmitting(false);
     }
@@ -391,12 +437,12 @@ function CommentsFlyout({
   const organizedComments = useMemo(() => {
     const commentMap = new Map<string, Comment>();
     const topLevelComments: Comment[] = [];
-    
+
     // First pass: create a map of all comments
     post.comments?.forEach(comment => {
       commentMap.set(comment.id, { ...comment, replies: [] });
     });
-    
+
     // Second pass: organize into tree structure
     post.comments?.forEach(comment => {
       const currentComment = commentMap.get(comment.id)!;
@@ -413,9 +459,9 @@ function CommentsFlyout({
         topLevelComments.push(currentComment);
       }
     });
-    
+
     // Sort top-level comments by creation date (newest first)
-    return topLevelComments.sort((a, b) => 
+    return topLevelComments.sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [post.comments]);
@@ -444,20 +490,21 @@ function CommentsFlyout({
 
           <ScrollView style={feedStyles.commentsList}>
             {organizedComments.length === 0 ? (
-              <View style={feedStyles.emptyContainer}>
-                <Text style={feedStyles.emptyText}>No comments yet</Text>
-                <Text style={feedStyles.emptySubtext}>Be the first to comment!</Text>
+              <View style={commonStyles.emptyContainer}>
+                <Text style={commonStyles.emptyText}>No comments yet</Text>
+                <Text style={commonStyles.emptySubtext}>Be the first to comment!</Text>
               </View>
             ) : (
               organizedComments.map(comment => (
-                <Comment 
-                  key={comment.id} 
-                  comment={comment} 
+                <Comment
+                  key={comment.id}
+                  comment={comment}
                   postId={post.id}
                   onVote={handleCommentVote}
                   onReply={handleReply}
                   onDelete={handleDeleteComment}
                   depth={0}
+                  currentUserId={currentUserId} // Pass currentUserId down
                 />
               ))
             )}
@@ -477,15 +524,15 @@ function CommentsFlyout({
                 </Pressable>
               </View>
             )}
-            
+
             <View style={feedStyles.identityPreview}>
-              <Image 
-                source={{ uri: commentAvatar }} 
-                style={feedStyles.previewAvatar} 
+              <Image
+                source={{ uri: commentAvatar }}
+                style={feedStyles.previewAvatar}
               />
               <Text style={feedStyles.previewUsername}>{commentUsername}</Text>
             </View>
-            
+
             <View style={feedStyles.inputRow}>
               <TextInput
                 style={feedStyles.commentInput}
@@ -564,16 +611,17 @@ function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
 
     } catch (error) {
       console.error('Error voting on post:', error);
-      onRefresh();
+      // Optionally revert optimistic update on error
+      onRefresh(); // Refresh to get actual state
     }
   };
 
   return (
     <View style={feedStyles.postCard}>
       <View style={feedStyles.postHeader}>
-        <Image 
-          source={{ uri: identity.avatar_url }} 
-          style={feedStyles.avatar} 
+        <Image
+          source={{ uri: identity.avatar_url }}
+          style={feedStyles.avatar}
         />
         <View style={feedStyles.authorInfo}>
           <Text style={feedStyles.username}>{identity.username}</Text>
@@ -582,20 +630,20 @@ function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
           </Text>
         </View>
       </View>
-      
+
       <Text style={feedStyles.content}>{post.content}</Text>
-      
+
       <View style={feedStyles.actions}>
         <View style={feedStyles.votes}>
-          <Pressable 
-            onPress={() => handlePostVote('up')} 
+          <Pressable
+            onPress={() => handlePostVote('up')}
             style={[feedStyles.voteButton, userVote === 'up' && feedStyles.voteButtonActive]}
           >
-            <AppIcon 
-              name="arrow-up-circle" 
-              size={24} 
-              color={userVote === 'up' ? '#10B981' : '#666'} 
-              outline={userVote !== 'up'} 
+            <AppIcon
+              name="arrow-up-circle"
+              size={24}
+              color={userVote === 'up' ? '#10B981' : '#666'}
+              outline={userVote !== 'up'}
             />
           </Pressable>
           <Text style={[
@@ -605,21 +653,21 @@ function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
           ]}>
             {optimisticVotes}
           </Text>
-          <Pressable 
-            onPress={() => handlePostVote('down')} 
+          <Pressable
+            onPress={() => handlePostVote('down')}
             style={[feedStyles.voteButton, userVote === 'down' && feedStyles.voteButtonActive]}
           >
-            <AppIcon 
-              name="arrow-down-circle" 
-              size={24} 
-              color={userVote === 'down' ? '#EF4444' : '#666'} 
-              outline={userVote !== 'down'} 
+            <AppIcon
+              name="arrow-down-circle"
+              size={24}
+              color={userVote === 'down' ? '#EF4444' : '#666'}
+              outline={userVote !== 'down'}
             />
           </Pressable>
         </View>
-        
-        <Pressable 
-          style={feedStyles.commentCount} 
+
+        <Pressable
+          style={feedStyles.commentCount}
           onPress={() => setShowComments(true)}
         >
           <AppIcon name="chatbubble" size={20} color="#666" outline={true} />
@@ -648,7 +696,10 @@ export default function HomeScreen() {
   const [rawPosts, setRawPosts] = useState<Post[]>([]);
 
   const fetchPosts = useCallback(async () => {
+    setLoading(true); // Ensure loading is true at the start
+    setError(null); // Reset error state
     try {
+      // Fetch posts including necessary comment fields
       let query = supabase
         .from('posts')
         .select(`
@@ -667,12 +718,12 @@ export default function HomeScreen() {
           )
         `);
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const { data, error: fetchError } = await query;
+      if (fetchError) throw fetchError;
       setRawPosts(data as Post[]);
     } catch (err: any) {
       console.error('Error fetching posts:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to fetch posts');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -690,31 +741,21 @@ export default function HomeScreen() {
       switch (selectedSort.id) {
         case 'recent':
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        
+
         case 'popular': {
           const aVotes = getVoteCount(a);
           const bVotes = getVoteCount(b);
-          
-          // If both posts have the same sign (both positive, both negative, or both zero)
-          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
-            return bVotes - aVotes; // Higher votes first
-          }
-          // If signs are different, positive goes first
-          return bVotes > 0 ? 1 : -1;
+          if (bVotes !== aVotes) return bVotes - aVotes; // Sort by votes first
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // Then by date
         }
-        
+
         case 'controversial': {
-          const aVotes = getVoteCount(a);
-          const bVotes = getVoteCount(b);
-          
-          // If both posts have the same sign (both positive, both negative, or both zero)
-          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
-            return aVotes - bVotes; // Lower votes first
-          }
-          // If signs are different, negative goes first
-          return aVotes < 0 ? -1 : 1;
+           const aDownvotes = a.votes?.filter(v => v.vote_type === 'down').length || 0;
+           const bDownvotes = b.votes?.filter(v => v.vote_type === 'down').length || 0;
+           if (bDownvotes !== aDownvotes) return bDownvotes - aDownvotes; // Sort by downvotes first
+           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // Then by date
         }
-        
+
         default:
           return 0;
       }
@@ -729,12 +770,12 @@ export default function HomeScreen() {
     fetchPosts();
   }, [fetchPosts]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
     fetchPosts();
-  };
+  }, [fetchPosts]);
 
-  if (loading && !refreshing) {
+  if (loading && !refreshing && posts.length === 0) { // Show loading only on initial load
     return (
       <View style={feedStyles.container}>
         <View style={feedStyles.header}>
@@ -747,7 +788,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (error) {
+  if (error && posts.length === 0) { // Show error only if there are no posts to display
     return (
       <View style={feedStyles.container}>
         <View style={feedStyles.header}>
@@ -755,7 +796,7 @@ export default function HomeScreen() {
         </View>
         <View style={commonStyles.errorContainer}>
           <Text style={commonStyles.errorText}>Error: {error}</Text>
-          <Pressable style={commonStyles.retryButton} onPress={fetchPosts}>
+          <Pressable style={commonStyles.retryButton} onPress={handleRefresh}>
             <Text style={commonStyles.retryButtonText}>Retry</Text>
           </Pressable>
         </View>
@@ -768,7 +809,7 @@ export default function HomeScreen() {
       <View style={feedStyles.header}>
         <Text style={feedStyles.title}>Campus Connect</Text>
       </View>
-      
+
       <View style={feedStyles.sortContainer}>
         <SortDropdown
           options={sortOptions}
@@ -780,7 +821,7 @@ export default function HomeScreen() {
       <FlatList
         data={posts}
         renderItem={({ item }) => (
-          <PostCard post={item} onRefresh={fetchPosts} />
+          <PostCard post={item} onRefresh={handleRefresh} /> // Pass handleRefresh
         )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={feedStyles.feed}
@@ -793,12 +834,14 @@ export default function HomeScreen() {
           />
         }
         ListEmptyComponent={
-          <View style={commonStyles.emptyContainer}>
-            <Text style={commonStyles.emptyText}>No posts yet</Text>
-            <Text style={commonStyles.emptySubtext}>
-              Be the first to share something with your campus!
-            </Text>
-          </View>
+          !loading && !error && ( // Only show empty if not loading and no error
+            <View style={commonStyles.emptyContainer}>
+              <Text style={commonStyles.emptyText}>No posts yet</Text>
+              <Text style={commonStyles.emptySubtext}>
+                Be the first to share something with your campus!
+              </Text>
+            </View>
+          ) || null // Return null if condition is false
         }
       />
     </View>
