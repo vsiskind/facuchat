@@ -51,16 +51,24 @@ export default function WelcomeScreen() {
         options={schoolOptions}
         selectedSchool={selectedSchool}
         onSelect={setSelectedSchool}
-        placeholder="Select your university..." // Optional: customize placeholder
+        placeholder="Select your university..."
       />
 
-      <Pressable
-        style={[styles.button, !selectedSchool && styles.buttonDisabled]} // Logic remains the same
-        onPress={handleSignUp} // Updated onPress handler
-        disabled={!selectedSchool} // Disable button if no school selected
-      >
-        <Text style={styles.buttonText}>Sign Up</Text> {/* Updated button text */}
-      </Pressable>
+      {/* Conditionally render Pressable or null */}
+      {!selectedSchool ? (
+        // Render a disabled-looking View when no school is selected
+        <View style={[styles.button, styles.buttonDisabled]}>
+          <Text style={styles.buttonText}>Sign Up</Text> 
+        </View>
+      ) : (
+        // Render the actual Pressable when a school is selected
+        <Pressable
+          style={styles.button} // No conditional style needed here now
+          onPress={handleSignUp} 
+        >
+          <Text style={styles.buttonText}>Sign Up</Text> 
+        </Pressable> 
+      )}
     </View>
   );
 }

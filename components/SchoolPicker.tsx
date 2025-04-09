@@ -62,7 +62,7 @@ export function SchoolPicker({
         onPress={() => setIsOpen(!isOpen)}
       >
         {/* Display selected label or placeholder */}
-        <Text style={[styles.triggerText, !selectedSchool && styles.placeholderText]}>
+        <Text style={[styles.triggerText, !selectedSchool ? styles.placeholderText : {}]}> {/* Use empty object {} here */}
           {selectedLabel}
         </Text>
         <AppIcon
@@ -96,9 +96,9 @@ export function SchoolPicker({
               ]}>
                 {option.label}
               </Text>
-              {selectedSchool === option.value && (
+              {selectedSchool === option.value ? ( // Use ternary operator here
                 <AppIcon name="checkmark" size={20} color="#7C3AED" outline={false} />
-              )}
+              ) : null}
             </Pressable>
           ))}
         </View>
