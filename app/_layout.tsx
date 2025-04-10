@@ -82,25 +82,19 @@ export default function RootLayout() {
     const currentGroup = segments[0] as string; 
 
     // Redirect logic based on auth state and current location
-    if (!session && currentGroup !== 'auth') {
-      console.log(`Redirecting to Auth: ${targetRoute}`);
+    // Allow navigation to onboarding even without session
+    if (!session && currentGroup !== 'auth' && currentGroup !== '(onboarding)') { 
       router.replace(targetRoute as any);
     } else if (session && !session.user?.email_confirmed_at && currentGroup !== 'auth') {
       // Redirect to verify if email not confirmed and not already in auth group
-      console.log(`Redirecting to Verify: ${targetRoute}`);
       router.replace(targetRoute as any);
     } else if (session && session.user?.email_confirmed_at && needsOnboarding && currentGroup !== '(onboarding)') {
       // Redirect to onboarding if needed and not already there
-      console.log(`Redirecting to Onboarding: ${targetRoute}`);
       router.replace(targetRoute as any);
     } else if (session && session.user?.email_confirmed_at && !needsOnboarding && currentGroup !== '(tabs)' && currentGroup !== 'settings') {
       // Redirect to main app tabs if authenticated, onboarded, and not already in tabs or settings
-      console.log(`Redirecting to App Tabs: ${targetRoute}`);
       router.replace(targetRoute as any);
-    } else {
-      console.log(`No redirect needed. Current group: ${currentGroup}, Target logic points to: ${targetRoute}`);
     }
-
   }, [router, segments, session, authLoading, onboardingChecked, hasCompletedOnboarding]);
 
 
@@ -145,6 +139,7 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="(tabs)"
+          options={{ gestureEnabled: false }} // Disable swipe back from tabs
         />
         <Stack.Screen
           name="auth" // Includes /auth and /auth/verify

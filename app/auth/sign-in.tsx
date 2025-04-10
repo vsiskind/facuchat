@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   ScrollView
 } from 'react-native';
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router'; // Removed Link import
 import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
 import { AppIcon } from '../../components/AppIcon';
 
@@ -162,10 +162,10 @@ export default function SignIn() {
 
           {/* Removed Resend Verification Button */}
 
-          {/* Updated href to point to the onboarding/school select screen */}
-          <Link href="/(onboarding)" style={styles.link}>
+          {/* Replace Link with Pressable and router.push */}
+          <Pressable onPress={() => router.push('/(onboarding)')} style={styles.link}>
             <Text style={styles.linkText}>Don't have an account? <Text style={styles.linkTextBold}>Sign up</Text></Text>
-          </Link>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
