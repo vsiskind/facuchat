@@ -14,7 +14,6 @@ export default function TabLayout() {
   useEffect(() => {
     // Ensure the user is authenticated and has a confirmed email
     if (session?.user && !session.user.email_confirmed_at) {
-      console.log('User in tabs with unverified email, redirecting to verification');
       router.replace({
         pathname: '/auth/verify',
         params: { email: session.user.email || '' }
@@ -67,7 +66,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: '',
-          tabBarIcon: ({ size, color }) => (
+          tabBarIcon: ({ size, color }: { size: number; color: string }) => (
             <AppIcon name="home" size={size} color={color} outline={true} />
           ),
         }}
@@ -76,10 +75,10 @@ export default function TabLayout() {
         name="create"
         options={{
           title: '',
-          tabBarIcon: ({ size, color }) => (
-            <AppIcon 
-              name="add-circle" 
-              size={Platform.OS === 'ios' ? size + 6 : size + 8} 
+          tabBarIcon: ({ size, color }: { size: number; color: string }) => (
+            <AppIcon
+              name="add-circle"
+              size={Platform.OS === 'ios' ? size + 6 : size + 8}
               color={color} 
               outline={true} 
             />
@@ -90,7 +89,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: '',
-          tabBarIcon: ({ size, color }) => (
+          tabBarIcon: ({ size, color }: { size: number; color: string }) => (
             <AppIcon name="person" size={size} color={color} outline={true} />
           ),
         }}

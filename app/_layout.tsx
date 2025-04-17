@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, createContext, useContext, useMemo } from 'react'; // Added createContext, useContext, useMemo
 import { Slot, Stack, SplashScreen, useRouter, useSegments } from 'expo-router'; // Import useSegments
 import { StatusBar } from 'expo-status-bar';
 import { useSupabaseAuth } from '../hooks/useSupabaseAuth';
@@ -13,39 +13,35 @@ declare global {
   }
 }
 
+// --- Onboarding Context ---
+interface OnboardingContextType {
+  hasCompletedOnboarding: boolean | null;
+  completeOnboarding: () => Promise<void>;
+}
+
+const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
+
+export const useOnboarding = () => {
+  const context = useContext(OnboardingContext);
+  if (!context) {
+    throw new Error('useOnboarding must be used within an OnboardingProvider');
+  }
+  return context;
+};
+// --- End Onboarding Context ---
+
 // Keep the splash screen visible until we are ready to render the first screen.
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  useFrameworkReady();
-  const router = useRouter(); 
-  const segments = useSegments(); // Get current route segments
+function RootLayoutNav() { // Renamed component to RootLayoutNav
+  const router = useRouter();
+  const segments = useSegments();
   const { session, loading: authLoading } = useSupabaseAuth();
-  const [onboardingChecked, setOnboardingChecked] = useState(false);
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
+  const { hasCompletedOnboarding } = useOnboarding(); // Use context state
+  const onboardingChecked = hasCompletedOnboarding !== null; // Determine if checked based on context state
 
+  // Effect to hide splash screen remains similar, depends on auth and onboarding check
   useEffect(() => {
-    const checkOnboardingStatus = async () => {
-      try {
-        const value = await AsyncStorage.getItem('hasCompletedOnboarding');
-        setHasCompletedOnboarding(value === 'true');
-      } catch (e) {
-        console.error('Failed to load onboarding status', e);
-        setHasCompletedOnboarding(false); // Default to needing onboarding on error
-      } finally {
-        setOnboardingChecked(true);
-      }
-    };
-
-    checkOnboardingStatus();
-
-    if (typeof window !== 'undefined' && window.frameworkReady) {
-      window.frameworkReady();
-    }
-  }, []);
-
-  useEffect(() => {
-    // Hide splash screen once all checks are done
     if (authLoading === false && onboardingChecked) {
       SplashScreen.hideAsync();
     }
@@ -63,7 +59,7 @@ export default function RootLayout() {
       return; 
     }
 
-    const needsOnboarding = hasCompletedOnboarding === false;
+    const needsOnboarding = hasCompletedOnboarding === false; // Use context state here
     // Determine the target route
     let targetRoute: string;
     if (!session) {
@@ -73,7 +69,7 @@ export default function RootLayout() {
       // Ensure email is passed as param if possible
       targetRoute = `/auth/verify?email=${session.user.email || ''}`; 
     } else if (needsOnboarding) {
-      targetRoute = '/(onboarding)';
+      targetRoute = '/(onboarding)/welcome'; // Direct to the new welcome screen
     } else {
       targetRoute = '/(tabs)';
     }
@@ -91,18 +87,18 @@ export default function RootLayout() {
     } else if (session && session.user?.email_confirmed_at && needsOnboarding && currentGroup !== '(onboarding)') {
       // Redirect to onboarding if needed and not already there
       router.replace(targetRoute as any);
-    } else if (session && session.user?.email_confirmed_at && !needsOnboarding && currentGroup !== '(tabs)' && currentGroup !== 'settings') {
-      // Redirect to main app tabs if authenticated, onboarded, and not already in tabs or settings
+    } else if (session && session.user?.email_confirmed_at && !needsOnboarding && currentGroup !== '(tabs)' && currentGroup !== 'settings' && segments[1] !== 'sign-up') { // Add check to prevent redirect from sign-up page during pre-check
+      // Redirect to main app tabs if authenticated, onboarded, and not already in tabs or settings AND NOT on sign-up page
       router.replace(targetRoute as any);
     }
+    // Dependency array now uses context state
   }, [router, segments, session, authLoading, onboardingChecked, hasCompletedOnboarding]);
 
 
   // Check for Supabase environment variables
   const missingEnvVars = !process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Show loading state while auth and onboarding status are being checked
-  // OR while navigation effect is determining the route
+  // Show loading state while auth is loading OR onboarding status is null (not yet checked)
   if (authLoading || !onboardingChecked) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -133,10 +129,6 @@ export default function RootLayout() {
       {/* Wrap the Stack with TouchableWithoutFeedback */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen
-            name="(onboarding)"
-          options={{ headerShown: false }}
-        />
         <Stack.Screen
           name="(tabs)"
           options={{ gestureEnabled: false }} // Disable swipe back from tabs
@@ -155,6 +147,70 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+// --- Onboarding Provider Component ---
+function OnboardingProvider({ children }: { children: React.ReactNode }) {
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean | null>(null);
+
+  // Load initial status from AsyncStorage
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      try {
+        const value = await AsyncStorage.getItem('hasCompletedOnboarding');
+        setHasCompletedOnboarding(value === 'true');
+      } catch (e) {
+        console.error('Failed to load onboarding status', e);
+        setHasCompletedOnboarding(false); // Default to needing onboarding on error
+      }
+    };
+    checkOnboardingStatus();
+  }, []);
+
+  // Function to mark onboarding as complete
+  const completeOnboarding = async () => {
+    try {
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      setHasCompletedOnboarding(true); // Update state immediately
+    } catch (error) {
+      console.error('Failed to save onboarding status', error);
+      // Handle error appropriately
+    }
+  };
+
+  // Memoize context value
+  const contextValue = useMemo(() => ({
+    hasCompletedOnboarding,
+    completeOnboarding,
+  }), [hasCompletedOnboarding]);
+
+  return (
+    <OnboardingContext.Provider value={contextValue}>
+      {children}
+    </OnboardingContext.Provider>
+  );
+}
+// --- End Onboarding Provider ---
+
+// --- Main Export ---
+export default function RootLayout() {
+  useFrameworkReady(); // Keep framework ready hook here
+
+  // Initialize framework ready listener if on web
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.frameworkReady) {
+      window.frameworkReady();
+    }
+  }, []);
+
+
+  return (
+    <OnboardingProvider>
+      <RootLayoutNav />
+    </OnboardingProvider>
+  );
+}
+// --- End Main Export ---
+
 
 const styles = StyleSheet.create({
   container: {

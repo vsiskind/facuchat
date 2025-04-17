@@ -32,7 +32,6 @@ export default function WelcomeScreen() {
       return;
     }
     try {
-      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       // Pass selected school as a query parameter to the sign-up page
       router.push({ pathname: '/auth/sign-up', params: { school: selectedSchool } });
     } catch (error) {

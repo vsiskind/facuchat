@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  Pressable, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   ScrollView,
@@ -15,6 +15,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { AppIcon } from '../../components/AppIcon';
 import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
+import { useOnboarding } from '@/app/_layout'; // Import the onboarding context hook
 
 const ACCENT_COLOR = '#7C3AED';
 const HEADER_BG_COLOR = '#6B21A8';
@@ -26,15 +27,14 @@ export default function VerifyEmailScreen() {
   const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false); // State for resend loading
   const [resendCooldown, setResendCooldown] = useState(0);
+  // Assuming 'utdt' is the only relevant school for now
+  const school = 'utdt';
   const { verifyOTP, resendVerificationEmail } = useSupabaseAuth();
-  
-  // Track if a resend is in progress
-  const [isResending, setIsResending] = useState(false);
-  
-  // Create refs for each input field
-  const inputRefs = useRef<Array<TextInput | null>>([]);
-  
+  const { hasCompletedOnboarding } = useOnboarding(); // Get onboarding status
+  const inputRefs = useRef<(TextInput | null)[]>([]); // Refs for inputs
+
   // Setup cooldown timer for resend button
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -44,43 +44,22 @@ export default function VerifyEmailScreen() {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  // Check if already verified when component mounts
-  useEffect(() => {
-    const checkVerificationStatus = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        // If the user has already verified their email, redirect to the app
-        if (session?.user?.email_confirmed_at && session.user.email === email) {
-          console.log('Email already verified, redirecting to app');
-          router.replace('/(tabs)');
-        } else if (email && resendCooldown === 0 && !isResending) {
-          // Otherwise, send a verification email if needed
-          console.log('Email not verified yet, sending verification email');
-          handleResendCode(true); // Pass silent=true for initial send
-        }
-      } catch (err) {
-        console.error('Error checking verification status:', err);
-      }
-    };
-    
-    checkVerificationStatus();
-  }, [email]);
-  
+  // REMOVED useEffect checking verification status on mount - Root layout handles this.
+
   // Handle input changes and auto-focus next input
   const handleCodeChange = (text: string, index: number) => {
     // Update the code array
     const newCode = [...verificationCode];
     newCode[index] = text;
     setVerificationCode(newCode);
-    
+
     // Auto focus logic
     if (text.length === 1 && index < 5) {
       // Focus next input
       inputRefs.current[index + 1]?.focus();
     }
   };
-  
+
   // Handle backspace key
   const handleKeyPress = (e: any, index: number) => {
     if (e.nativeEvent.key === 'Backspace' && index > 0 && !verificationCode[index]) {
@@ -88,47 +67,40 @@ export default function VerifyEmailScreen() {
       inputRefs.current[index - 1]?.focus();
     }
   };
-  
+
   // Handle verification code submission
   const handleVerify = async () => {
     // Combine code digits
     const code = verificationCode.join('');
-    
+
     if (code.length !== 6) {
       setError('Please enter all 6 digits of your verification code');
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      console.log(`Attempting to verify email: ${email} with code: ${code}`);
-      
       // Verify OTP with Supabase - using the OTP method
       const { error, data } = await verifyOTP(email, code);
-      
+
       if (error) {
         console.error('Verification failed:', error);
         throw error;
       }
-      
-      console.log('Verification successful:', data);
-      
+
       // Successfully verified and signed in
       if (data?.session) {
-        Alert.alert(
-          'Email Verified',
-          'Your email has been successfully verified. You will now be redirected to the app.',
-          [
-            {
-              text: 'Continue',
-              onPress: () => router.replace('/(tabs)')
-            }
-          ]
-        );
+        // Navigate based on onboarding status AFTER verification
+        if (hasCompletedOnboarding === false) {
+          router.replace('/(onboarding)/welcome');
+        } else {
+          router.replace('/(tabs)'); // Fallback or already onboarded
+        }
       } else {
         // Verification successful but not signed in
+        // This case might be less common now, but keep the alert for clarity if it happens
         Alert.alert(
           'Email Verified',
           'Your email has been successfully verified. Please sign in to continue.',
@@ -147,28 +119,29 @@ export default function VerifyEmailScreen() {
       setIsLoading(false);
     }
   };
-  
+
   // Resend verification email
   const handleResendCode = async (silent = false) => {
-    if (resendCooldown > 0 || isResending) return;
-    
+    // Ensure email and school are available
+    if (!email || !school || resendCooldown > 0 || isResending) return;
+
     setIsResending(true);
     if (!silent) {
       setIsLoading(true);
       setError(null);
     }
-    
+
     try {
-      console.log(`Resending verification email to: ${email}`);
-      const { error } = await resendVerificationEmail(email);
-      
+      // Pass the 'school' parameter here
+      const { error } = await resendVerificationEmail(email, school);
+
       if (error) {
         // Check for rate limit error
         if (error.message && error.message.includes('security purposes') && error.message.includes('after')) {
           // Extract remaining time if available
           const timeMatch = error.message.match(/after (\d+) seconds/);
           const remainingTime = timeMatch && timeMatch[1] ? parseInt(timeMatch[1], 10) : COOLDOWN_PERIOD;
-          
+
           setResendCooldown(remainingTime);
           if (!silent) {
             setError(`Please wait ${remainingTime} seconds before requesting another code.`);
@@ -177,11 +150,9 @@ export default function VerifyEmailScreen() {
           throw error;
         }
       } else {
-        console.log('Verification email sent successfully');
-        
         // Set cooldown timer for full period
         setResendCooldown(COOLDOWN_PERIOD);
-        
+
         if (!silent) {
           Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
         }
@@ -198,11 +169,11 @@ export default function VerifyEmailScreen() {
       }
     }
   };
-  
-  const navigateToSignIn = () => {
-    router.replace('/auth/sign-in');
+
+  const navigateToSignUp = () => {
+    router.replace('/auth/sign-up');
   };
-  
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -215,20 +186,20 @@ export default function VerifyEmailScreen() {
           <Text style={styles.appName}>Email Verification</Text>
           <Text style={styles.tagline}>Enter the code sent to your email</Text>
         </View>
-        
+
         <View style={styles.card}>
           <Text style={styles.subtitle}>
             We've sent a 6-digit verification code to:
           </Text>
           <Text style={styles.emailText}>{email}</Text>
-          
+
           {error && (
             <View style={styles.errorContainer}>
               <AppIcon name="alert-circle" size={20} color="#EF4444" outline={false} />
               <Text style={styles.error}>{error}</Text>
             </View>
           )}
-          
+
           <View style={styles.codeContainer}>
             {verificationCode.map((digit, index) => (
               <TextInput
@@ -245,7 +216,7 @@ export default function VerifyEmailScreen() {
               />
             ))}
           </View>
-          
+
           <Pressable
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleVerify}
@@ -257,7 +228,7 @@ export default function VerifyEmailScreen() {
               <Text style={styles.buttonText}>Verify Email</Text>
             )}
           </Pressable>
-          
+
           <View style={styles.resendContainer}>
             <Text style={styles.resendText}>Didn't receive the code?</Text>
             <Pressable
@@ -268,17 +239,17 @@ export default function VerifyEmailScreen() {
                 styles.resendButton,
                 (resendCooldown > 0 || isLoading || isResending) && styles.resendButtonDisabled
               ]}>
-                {isResending ? 'Sending...' : 
-                  resendCooldown > 0 
-                    ? `Resend in ${resendCooldown}s` 
+                {isResending ? 'Sending...' :
+                  resendCooldown > 0
+                    ? `Resend in ${resendCooldown}s`
                     : 'Resend Code'}
               </Text>
             </Pressable>
           </View>
-          
-          <Pressable onPress={navigateToSignIn} style={styles.backButton}>
+
+          <Pressable onPress={navigateToSignUp} style={styles.backButton}>
             <AppIcon name="arrow-back" size={20} color="#666" outline={true} />
-            <Text style={styles.backButtonText}>Back to Sign In</Text>
+            <Text style={styles.backButtonText}>Back to Sign Up</Text>
           </Pressable>
         </View>
       </ScrollView>

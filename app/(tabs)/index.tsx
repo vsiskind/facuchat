@@ -198,7 +198,7 @@ function Comment({
       <View style={[feedStyles.comment, { marginLeft: depth * 16 }]}>
         <View style={feedStyles.commentHeader}>
           <Image
-            source={{ uri: identity.avatar_url }}
+            source={{ uri: identity.avatar_url || 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' }}
             style={feedStyles.commentAvatar}
           />
           <View style={feedStyles.commentAuthorInfo}>
@@ -527,7 +527,7 @@ function CommentsFlyout({
 
             <View style={feedStyles.identityPreview}>
               <Image
-                source={{ uri: commentAvatar }}
+                source={{ uri: commentAvatar || 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' }}
                 style={feedStyles.previewAvatar}
               />
               <Text style={feedStyles.previewUsername}>{commentUsername}</Text>
@@ -620,7 +620,7 @@ function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
     <View style={feedStyles.postCard}>
       <View style={feedStyles.postHeader}>
         <Image
-          source={{ uri: identity.avatar_url }}
+          source={{ uri: identity.avatar_url || 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' }}
           style={feedStyles.avatar}
         />
         <View style={feedStyles.authorInfo}>

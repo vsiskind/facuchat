@@ -70,6 +70,10 @@ export default function CreatePostScreen() {
         
       if (identityError) throw identityError;
 
+      // Regenerate identity for the next post
+      setPostUsername(generateRandomUsername());
+      setPostAvatar(getRandomAvatarUrl());
+
       setContent(''); // Added missing semicolon
       router.push('/(tabs)');
 
@@ -99,7 +103,7 @@ export default function CreatePostScreen() {
           {/* Content area */}
           <View style={createStyles.content}>
             <View style={createStyles.previewCard}>
-              <Image source={{ uri: postAvatar }} style={createStyles.avatar} />
+              <Image source={{ uri: postAvatar || 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' }} style={createStyles.avatar} />
               <View style={createStyles.previewInfo}>
                 <Text style={createStyles.previewUsername}>{postUsername}</Text>
                 <Text style={createStyles.previewNote}>Your anonymous identity for this post</Text>

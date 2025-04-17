@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS comment_identities (
 CREATE TABLE IF NOT EXISTS comment_votes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   comment_id uuid REFERENCES comments(id) ON DELETE CASCADE NOT NULL,
-  user_id uuid REFERENCES profiles(id) NOT NULL,
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   vote_type text NOT NULL CHECK (vote_type IN ('up', 'down')),
   created_at timestamptz DEFAULT now(),
   UNIQUE(comment_id, user_id)

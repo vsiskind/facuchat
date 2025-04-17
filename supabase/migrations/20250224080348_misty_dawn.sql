@@ -58,7 +58,7 @@ CREATE TABLE posts (
 CREATE TABLE votes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id uuid REFERENCES posts(id) NOT NULL,
-  user_id uuid REFERENCES profiles(id) NOT NULL,
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   vote_type text CHECK (vote_type IN ('up', 'down')) NOT NULL,
   created_at timestamptz DEFAULT now(),
   UNIQUE(post_id, user_id)
@@ -68,7 +68,7 @@ CREATE TABLE votes (
 CREATE TABLE comments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id uuid REFERENCES posts(id) NOT NULL,
-  author_id uuid REFERENCES profiles(id) NOT NULL,
+  author_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   content text NOT NULL,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()

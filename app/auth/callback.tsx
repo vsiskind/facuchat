@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Text, View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
@@ -19,7 +19,6 @@ export default function AuthCallback() {
       }
       
       try {
-        console.log('Processing auth callback...');
         
         // Check if we have a session after the email confirmation
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -29,17 +28,11 @@ export default function AuthCallback() {
           throw sessionError;
         }
         
-        console.log('Session check result:', session ? 'Session exists' : 'No session');
-        
         if (session) {
           // Log user details for debugging
-          console.log('User ID:', session.user.id);
-          console.log('Email:', session.user.email);
-          console.log('Email confirmed at:', session.user.email_confirmed_at);
           
           // Double-check that the email is actually confirmed before proceeding
           if (!session.user.email_confirmed_at) {
-            console.log('Email still not confirmed after callback, redirecting to verification screen');
             router.replace({
               pathname: '/auth/verify',
               params: { email: session.user.email || '' }
@@ -47,11 +40,9 @@ export default function AuthCallback() {
             return;
           }
           
-          console.log('Email confirmed, redirecting to app');
           // User is authenticated with confirmed email, redirect to app
           router.replace('/(tabs)');
         } else {
-          console.log('No session found, redirecting to sign in');
           // No session found, redirect to sign in
           router.replace('/auth/sign-in');
         }
@@ -75,7 +66,7 @@ export default function AuthCallback() {
         </View>
       ) : (
         <View style={styles.messageContainer}>
-          <AppIcon name="checkmark-circle" size={48} color="#10B981" outline={false} />
+          <AppIcon name="checkmark" size={48} color="#10B981" outline={false} />
           <Text style={styles.title}>Verifying Your Email</Text>
           <ActivityIndicator color="#7C3AED" size="large" style={styles.spinner} />
           <Text style={styles.message}>

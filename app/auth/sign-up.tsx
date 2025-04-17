@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Link, router, useLocalSearchParams } from 'expo-router'; // Import useLocalSearchParams
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Added AsyncStorage import
 import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
 import { AppIcon } from '../../components/AppIcon';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; // Re-add SafeAreaView and add useSafeAreaInsets
@@ -75,15 +76,31 @@ export default function SignUp() {
 
     try {
       // Pass school to signUp function
-      const { error: signUpError } = await signUp(email, password, school || ''); // Pass school
+      const signUpResult = await signUp(email, password, school || ''); // Pass school
 
-      if (signUpError) {
-        throw signUpError;
+      // Check if the signUp hook returned an error
+      if (signUpResult.error) {
+        // Display the error message provided by the hook
+        setError(signUpResult.error.message);
+        // Do NOT redirect if there was an error
+      } else {
+        // If no error, it means sign up was successful for a new or unverified user.
+        // If no error, sign up initiated successfully.
+        // Reset the onboarding flag HERE to ensure onboarding runs after verification
+        await AsyncStorage.removeItem('hasCompletedOnboarding');
+
+        // --- ADD EXPLICIT REDIRECT HERE ---
+        router.replace({
+          pathname: '/auth/verify',
+          params: { email: email } // Pass the email used for sign-up
+        });
+        // --- END ADDED REDIRECT ---
       }
-      
-      // The signUp function will handle the redirection to verification page
+
     } catch (err: any) {
-      setError(err.message || 'Failed to sign up');
+      // Catch any unexpected errors during the async call itself
+      console.error('Unexpected error in handleSignUp:', err);
+      setError(err.message || 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }

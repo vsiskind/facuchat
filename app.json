@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "campus-connect",
-    "slug": "campus-connect",
+    "name": "facuchat",
+    "slug": "facuchat",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
