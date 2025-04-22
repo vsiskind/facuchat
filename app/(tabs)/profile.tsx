@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, FlatList, Image, Pressable, ActivityIndicator, Alert, RefreshControl, Animated as RNAnimated } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, FlatList, Image, Pressable, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { router } from 'expo-router';
+import { router } from 'expo-router'; // Ensure router is imported
 import { AppIcon } from '../../components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
 import { SortDropdown, SortOption } from '../../components/SortDropdown';
 import { profileStyles, commonStyles, feedStyles } from '../../styles/app.styles';
-import { Swipeable } from 'react-native-gesture-handler';
-import React from 'react';
+// Removed unused Swipeable and RNAnimated imports
+// Removed redundant React import
 
 const sortOptions: SortOption[] = [
   {
@@ -67,12 +67,12 @@ type Comment = {
   };
 };
 
-function PostCard({ post, onDelete, onRefresh }: { 
-  post: Post; 
+// Removed onRefresh from destructuring parameters
+function PostCard({ post, onDelete }: {
+  post: Post;
   onDelete: (postId: string) => void;
-  onRefresh: () => void;
 }) {
-  const identity = post.post_identities[0] || { 
+  const identity = post.post_identities[0] || {
     username: 'Anonymous', 
     avatar_url: 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' 
   };
@@ -132,6 +132,13 @@ function PostCard({ post, onDelete, onRefresh }: {
           <AppIcon name="chatbubble" size={16} color="#666" outline={true} />
           <Text style={profileStyles.statText}>{post.comments?.length || 0} comments</Text>
         </View>
+        {/* Add View Post Link */}
+        <Pressable
+          style={profileStyles.viewLink}
+          onPress={() => router.push({ pathname: '/', params: { postId: post.id } })}
+        >
+          <Text style={profileStyles.viewLinkText}>View Post</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -197,6 +204,13 @@ function CommentCard({ comment, onDelete }: {
           <AppIcon name="arrow-up-circle" size={16} color="#666" outline={true} />
           <Text style={profileStyles.statText}>{votes} votes</Text>
         </View>
+        {/* Add View Thread Link */}
+        <Pressable
+          style={profileStyles.viewLink}
+          onPress={() => router.push({ pathname: '/', params: { postId: comment.post_id, commentId: comment.id } })}
+        >
+          <Text style={profileStyles.viewLinkText}>View Thread</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -260,31 +274,15 @@ export default function ProfileScreen() {
       switch (selectedSort.id) {
         case 'recent':
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        
-        case 'popular': {
-          const aVotes = getVoteCount(a);
-          const bVotes = getVoteCount(b);
-          
-          // If both posts have the same sign (both positive, both negative, or both zero)
-          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
-            return bVotes - aVotes; // Higher votes first
-          }
-          // If signs are different, positive goes first
-          return bVotes > 0 ? 1 : -1;
-        }
-        
-        case 'controversial': {
-          const aVotes = getVoteCount(a);
-          const bVotes = getVoteCount(b);
-          
-          // If both posts have the same sign (both positive, both negative, or both zero)
-          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
-            return aVotes - bVotes; // Lower votes first
-          }
-          // If signs are different, negative goes first
-          return aVotes < 0 ? -1 : 1;
-        }
-        
+
+        case 'popular':
+          // Simplified sorting: Higher votes first
+          return getVoteCount(b) - getVoteCount(a);
+
+        case 'controversial':
+          // Simplified sorting: Lower votes first (more negative)
+          return getVoteCount(a) - getVoteCount(b);
+
         default:
           return 0;
       }
@@ -302,31 +300,15 @@ export default function ProfileScreen() {
       switch (selectedSort.id) {
         case 'recent':
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        
-        case 'popular': {
-          const aVotes = getVoteCount(a);
-          const bVotes = getVoteCount(b);
-          
-          // If both comments have the same sign (both positive, both negative, or both zero)
-          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
-            return bVotes - aVotes; // Higher votes first
-          }
-          // If signs are different, positive goes first
-          return bVotes > 0 ? 1 : -1;
-        }
-        
-        case 'controversial': {
-          const aVotes = getVoteCount(a);
-          const bVotes = getVoteCount(b);
-          
-          // If both comments have the same sign (both positive, both negative, or both zero)
-          if ((aVotes >= 0 && bVotes >= 0) || (aVotes <= 0 && bVotes <= 0)) {
-            return aVotes - bVotes; // Lower votes first
-          }
-          // If signs are different, negative goes first
-          return aVotes < 0 ? -1 : 1;
-        }
-        
+
+        case 'popular':
+          // Simplified sorting: Higher votes first
+          return getVoteCount(b) - getVoteCount(a);
+
+        case 'controversial':
+           // Simplified sorting: Lower votes first (more negative)
+          return getVoteCount(a) - getVoteCount(b);
+
         default:
           return 0;
       }
@@ -409,7 +391,8 @@ export default function ProfileScreen() {
         .eq('author_id', user.id);
 
       if (error) throw error;
-      setRawComments(data as Comment[]);
+      // Adjust type assertion to fix TS error
+      setRawComments(data as unknown as Comment[]);
     } catch (err: any) {
       setError(err.message);
       console.error('Error fetching user comments:', err);
@@ -543,7 +526,7 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
         <View style={profileStyles.karmaContainer}>
-          <AppIcon name="trophy" size={18} color="#F3E8FF" outline={true} />
+          <AppIcon name="star" size={18} color="#F3E8FF" outline={true} />
           <Text style={profileStyles.karmaText}>
             {karma} karma points
           </Text>
@@ -599,10 +582,10 @@ export default function ProfileScreen() {
         <FlatList
           data={posts}
           renderItem={({ item }) => (
-            <PostCard 
-              post={item} 
+            <PostCard
+              post={item}
               onDelete={handleDeletePost}
-              onRefresh={fetchUserPosts}
+              // Removed unused onRefresh prop from usage
             />
           )}
           keyExtractor={(item) => item.id}

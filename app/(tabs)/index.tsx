@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'; // Add useRef
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Animated,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { useLocalSearchParams } from 'expo-router'; // Import useLocalSearchParams
 import { AppIcon } from '../../components/AppIcon';
 import { formatDistanceToNow } from 'date-fns';
 import { generateRandomUsername, getRandomAvatarUrl } from '../utils/anonymous';
@@ -86,7 +87,8 @@ function Comment({
   onReply,
   onDelete,
   depth = 0,
-  currentUserId // Added prop
+  currentUserId, // Added prop
+  onLayout // Add onLayout prop
 }: {
   comment: Comment;
   postId: string;
@@ -95,6 +97,7 @@ function Comment({
   onDelete: (commentId: string) => void;
   currentUserId: string | null; // Added prop type
   depth?: number;
+  onLayout?: (event: any) => void; // Add type for onLayout
 }) {
   const [optimisticVotes, setOptimisticVotes] = useState(0);
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
@@ -195,7 +198,11 @@ function Comment({
       rightThreshold={40}
       overshootRight={false} // Prevent overshooting if not author
     >
-      <View style={[feedStyles.comment, { marginLeft: depth * 16 }]}>
+      {/* Add onLayout to the root View */}
+      <View 
+        style={[feedStyles.comment, { marginLeft: depth * 16 }]}
+        onLayout={onLayout} 
+      >
         <View style={feedStyles.commentHeader}>
           <Image
             source={{ uri: identity.avatar_url || 'https://api.dicebear.com/7.x/pixel-art/png?seed=default&backgroundColor=7c3aed' }}
@@ -289,17 +296,22 @@ function Comment({
   );
 }
 
+// Modify CommentsFlyout props to accept initialCommentId
 function CommentsFlyout({
   post,
   visible,
   onClose,
-  onRefresh
+  onRefresh,
+  initialCommentId
 }: {
   post: Post;
   visible: boolean;
   onClose: () => void;
   onRefresh: () => void;
+  initialCommentId?: string; // Add optional prop
 }) {
+  const scrollRef = useRef<ScrollView>(null); // Add ScrollView ref
+  const commentLayouts = useRef(new Map<string, number>()); // Ref to store comment Y positions
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commentUsername, setCommentUsername] = useState('');
@@ -333,6 +345,61 @@ function CommentsFlyout({
       setCurrentUserId(null);
     }
   }, [visible]);
+
+  const organizedComments = useMemo(() => {
+    const commentMap = new Map<string, Comment>();
+    const topLevelComments: Comment[] = [];
+
+    // First pass: create a map of all comments
+    post.comments?.forEach(comment => {
+      commentMap.set(comment.id, { ...comment, replies: [] });
+    });
+
+    // Second pass: organize into tree structure
+    post.comments?.forEach(comment => {
+      const currentComment = commentMap.get(comment.id)!;
+      if (comment.parent_comment_id) {
+        const parentComment = commentMap.get(comment.parent_comment_id);
+        if (parentComment) {
+          parentComment.replies = parentComment.replies || [];
+          parentComment.replies.push(currentComment);
+        } else {
+          // If parent doesn't exist (perhaps deleted), add as top-level
+          topLevelComments.push(currentComment);
+        }
+      } else {
+        topLevelComments.push(currentComment);
+      }
+    });
+
+    // Sort top-level comments by creation date (newest first)
+    return topLevelComments.sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [post.comments]);
+
+  // Effect to scroll to the specific comment when flyout opens with initialCommentId
+  useEffect(() => {
+    // Check if the flyout is visible, an initialCommentId is provided,
+    // comments are loaded, and the layout map has entries.
+    if (visible && initialCommentId && organizedComments.length > 0 && commentLayouts.current.size > 0) {
+      const layoutY = commentLayouts.current.get(initialCommentId);
+      
+      // Check if the layout position for the target comment is found
+      if (layoutY !== undefined) {
+        // Use setTimeout to ensure the modal animation and layout calculations are complete
+        setTimeout(() => {
+          scrollRef.current?.scrollTo({ y: layoutY, animated: true });
+        }, 150); // Delay might need adjustment based on performance/animation
+      } else {
+        // If layoutY is not found yet, it might be a nested comment whose parent isn't expanded,
+        // or the layout calculation hasn't finished. Log a warning for now.
+        // More complex logic could be added here to expand parents if needed.
+        console.warn(`Layout for comment ${initialCommentId} not found yet. It might be nested or layout is pending.`);
+      }
+    }
+  // Dependencies: run when visibility, initialCommentId, or the organizedComments list changes.
+  }, [visible, initialCommentId, organizedComments]); // Rerun when visibility, ID, or comments change
 
   const handleCommentVote = async (commentId: string, voteType: 'up' | 'down') => {
     try {
@@ -434,37 +501,7 @@ function CommentsFlyout({
     generateNewIdentity();
   };
 
-  const organizedComments = useMemo(() => {
-    const commentMap = new Map<string, Comment>();
-    const topLevelComments: Comment[] = [];
-
-    // First pass: create a map of all comments
-    post.comments?.forEach(comment => {
-      commentMap.set(comment.id, { ...comment, replies: [] });
-    });
-
-    // Second pass: organize into tree structure
-    post.comments?.forEach(comment => {
-      const currentComment = commentMap.get(comment.id)!;
-      if (comment.parent_comment_id) {
-        const parentComment = commentMap.get(comment.parent_comment_id);
-        if (parentComment) {
-          parentComment.replies = parentComment.replies || [];
-          parentComment.replies.push(currentComment);
-        } else {
-          // If parent doesn't exist (perhaps deleted), add as top-level
-          topLevelComments.push(currentComment);
-        }
-      } else {
-        topLevelComments.push(currentComment);
-      }
-    });
-
-    // Sort top-level comments by creation date (newest first)
-    return topLevelComments.sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-  }, [post.comments]);
+  // Moved organizedComments declaration earlier
 
   const replyingToComment = replyingTo ? post.comments.find(c => c.id === replyingTo) : null;
   const replyingToIdentity = replyingToComment?.comment_identities?.[0]?.username || 'Anonymous';
@@ -488,7 +525,10 @@ function CommentsFlyout({
             </Pressable>
           </View>
 
-          <ScrollView style={feedStyles.commentsList}>
+          <ScrollView 
+            ref={scrollRef} // Assign ref
+            style={feedStyles.commentsList}
+          >
             {organizedComments.length === 0 ? (
               <View style={commonStyles.emptyContainer}>
                 <Text style={commonStyles.emptyText}>No comments yet</Text>
@@ -505,6 +545,13 @@ function CommentsFlyout({
                   onDelete={handleDeleteComment}
                   depth={0}
                   currentUserId={currentUserId} // Pass currentUserId down
+                  // Pass onLayout callback to capture comment position
+                  onLayout={(event) => {
+                    // Ensure layout exists before setting
+                    if (event.nativeEvent?.layout) {
+                       commentLayouts.current.set(comment.id, event.nativeEvent.layout.y);
+                    }
+                  }}
                 />
               ))
             )}
@@ -565,10 +612,26 @@ function CommentsFlyout({
   );
 }
 
-function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
+// Modify PostCard props to accept initialCommentId
+function PostCard({ 
+  post, 
+  onRefresh, 
+  initialCommentId 
+}: { 
+  post: Post; 
+  onRefresh: () => void; 
+  initialCommentId?: string; // Add optional prop
+}) {
   const [optimisticVotes, setOptimisticVotes] = useState(0);
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
   const [showComments, setShowComments] = useState(false);
+
+  // Effect to open comments if initialCommentId is provided
+  useEffect(() => {
+    if (initialCommentId) {
+      setShowComments(true);
+    }
+  }, [initialCommentId]);
 
   useEffect(() => {
     const upvotes = post.votes?.filter(vote => vote.vote_type === 'up').length || 0;
@@ -678,10 +741,13 @@ function PostCard({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
       </View>
 
       <CommentsFlyout
+        // Remove duplicate post prop
         post={post}
         visible={showComments}
         onClose={() => setShowComments(false)}
         onRefresh={onRefresh}
+        // Pass initialCommentId down to the flyout
+        initialCommentId={initialCommentId} 
       />
     </View>
   );
@@ -694,6 +760,8 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedSort, setSelectedSort] = useState<SortOption>(sortOptions[0]);
   const [rawPosts, setRawPosts] = useState<Post[]>([]);
+  const params = useLocalSearchParams<{ postId?: string; commentId?: string }>(); // Get params
+  const flatListRef = useRef<FlatList>(null); // Add FlatList ref
 
   const fetchPosts = useCallback(async () => {
     setLoading(true); // Ensure loading is true at the start
@@ -770,6 +838,19 @@ export default function HomeScreen() {
     fetchPosts();
   }, [fetchPosts]);
 
+  // Effect to scroll to post if postId param exists
+  useEffect(() => {
+    if (params.postId && posts.length > 0) {
+      const postIndex = posts.findIndex(p => p.id === params.postId);
+      if (postIndex !== -1) {
+        // Use setTimeout to ensure the list has rendered before scrolling
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({ animated: true, index: postIndex, viewPosition: 0.5 }); // Scroll to middle
+        }, 100); // Small delay
+      }
+    }
+  }, [params.postId, posts]); // Rerun when postId or posts change
+
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     fetchPosts();
@@ -819,9 +900,15 @@ export default function HomeScreen() {
       </View>
 
       <FlatList
+        ref={flatListRef} // Assign ref
         data={posts}
         renderItem={({ item }) => (
-          <PostCard post={item} onRefresh={handleRefresh} /> // Pass handleRefresh
+          <PostCard
+            post={item}
+            onRefresh={handleRefresh}
+            // Pass commentId only if the postId matches
+            initialCommentId={item.id === params.postId ? params.commentId : undefined}
+          />
         )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={feedStyles.feed}

@@ -20,6 +20,7 @@ const DANGER_COLOR = '#EF4444';
 export default function SettingsScreen() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isRequestingPasswordReset, setIsRequestingPasswordReset] = useState(false); // Added state for reset password
   const [signOutTriggered, setSignOutTriggered] = useState(false);
 
   // Effect for handling sign out navigation
@@ -102,6 +103,26 @@ export default function SettingsScreen() {
     }
   };
 
+  // Handler for Reset Password button
+  const handleResetPasswordRequest = async () => {
+    if (isRequestingPasswordReset) return; // Prevent multiple clicks
+
+    setIsRequestingPasswordReset(true);
+    try {
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) throw signOutError;
+
+      // Navigate to forgot password screen after successful sign out
+      router.replace('/auth/forgot-password');
+
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to initiate password reset.');
+      // Only reset loading state on error, as navigation will occur on success
+      setIsRequestingPasswordReset(false);
+    }
+    // Don't reset loading state in finally here, navigation handles the transition
+  };
+
   // Main settings view
   return (
     <View style={styles.container}>
@@ -135,10 +156,15 @@ export default function SettingsScreen() {
 
           <Pressable
             style={styles.settingRow}
-            onPress={() => router.push('/settings/change-password')}
+            onPress={handleResetPasswordRequest} // Use the new handler
+            disabled={isRequestingPasswordReset} // Disable when loading
           >
-            <AppIcon name="key" size={22} color={ACCENT_COLOR} outline={true} />
-            <Text style={styles.settingText}>Change Password</Text>
+            {isRequestingPasswordReset ? (
+              <ActivityIndicator color={ACCENT_COLOR} size="small" />
+            ) : (
+              <AppIcon name="key" size={22} color={ACCENT_COLOR} outline={true} />
+            )}
+            <Text style={styles.settingText}>Reset Password</Text>
             <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
           </Pressable>
 

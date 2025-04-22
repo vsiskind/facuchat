@@ -31,6 +31,8 @@ export type IconName = // Add export keyword here
   | 'chevron-forward'
   | 'key'
   | 'log-out'
+  | 'menu'
+  | 'star'
   // Icons used in SortDropdown
   | 'time' 
   | 'flame' 

@@ -644,6 +644,15 @@ export const profileStyles = StyleSheet.create({
     color: '#666666',
     marginLeft: 4,
   },
+  viewLink: {
+    marginLeft: 'auto', // Push to the right within the stats container
+    paddingVertical: 4, // Add some vertical touch area
+  },
+  viewLinkText: {
+    fontSize: 14,
+    color: ACCENT_COLOR, // Use accent color for links
+    fontWeight: '500',
+  },
   footer: {
     position: 'absolute',
     bottom: 0,

@@ -162,8 +162,13 @@ export default function SignIn() {
 
           {/* Removed Resend Verification Button */}
 
-          {/* Replace Link with Pressable and router.push */}
-          <Pressable onPress={() => router.push('/(onboarding)')} style={styles.link}>
+          {/* Forgot Password Link */}
+          <Pressable onPress={() => router.push('/auth/forgot-password')} style={styles.link}>
+            <Text style={styles.linkText}><Text style={styles.linkTextBold}>Forgot Password?</Text></Text>
+          </Pressable>
+
+          {/* Sign Up Link (Moved Down) */}
+          <Pressable onPress={() => router.push('/(onboarding)')} style={[styles.link, { marginTop: 24 }]}>
             <Text style={styles.linkText}>Don't have an account? <Text style={styles.linkTextBold}>Sign up</Text></Text>
           </Pressable>
         </View>
