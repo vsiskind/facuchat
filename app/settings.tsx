@@ -145,6 +145,17 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Pressable
             style={styles.settingRow}
+            onPress={() => router.push('/settings/notifications')} // Navigate to notifications screen
+          >
+            <AppIcon name="notifications" size={22} color={ACCENT_COLOR} outline={true} />
+            <Text style={styles.settingText}>Notification Settings</Text>
+            <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
+          </Pressable>
+
+          <View style={styles.divider} />
+
+          <Pressable
+            style={styles.settingRow}
             onPress={() => router.push('/settings/change-email')}
           >
             <AppIcon name="mail" size={22} color={ACCENT_COLOR} outline={true} />

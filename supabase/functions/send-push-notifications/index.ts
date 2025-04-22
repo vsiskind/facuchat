@@ -42,10 +42,10 @@ serve(async (req) => {
     const notification = payload.record // The newly inserted notification row
     console.log('Processing notification:', notification.id)
 
-    // 4. Fetch the recipient's push token
+    // 4. Fetch the recipient's push token and notification preferences
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('push_token')
+      .select('push_token, notify_like_milestone_post, notify_like_milestone_comment, notify_comment_milestone_post, notify_reply_to_comment') // Fetch preferences
       .eq('id', notification.user_id)
       .single()
 
@@ -65,10 +65,42 @@ serve(async (req) => {
       return new Response('No push token found', { status: 200 })
     }
 
-    const pushToken = profile.push_token
+    // 5. Check notification preferences based on type
+    const notificationType = notification.type as keyof typeof messageTemplates;
+    let shouldSend = true; // Default to true
 
-    // 5. Validate the push token (Basic check, Expo SDK provided more robust validation)
-    // You might want to add more checks here if needed, e.g., regex for "ExponentPushToken[...]"
+    switch (notificationType) {
+      case 'like_milestone_post':
+        shouldSend = profile.notify_like_milestone_post ?? true; // Default to true if null
+        break;
+      case 'like_milestone_comment':
+        shouldSend = profile.notify_like_milestone_comment ?? true;
+        break;
+      case 'comment_milestone_post':
+        shouldSend = profile.notify_comment_milestone_post ?? true;
+        break;
+      case 'reply_to_comment':
+        shouldSend = profile.notify_reply_to_comment ?? true;
+        break;
+      // Add cases for other notification types if needed
+      default:
+        // Unknown type, maybe send anyway or log?
+        console.warn(`Unknown notification type '${notificationType}' for preference check.`);
+        break;
+    }
+
+    if (!shouldSend) {
+      console.log(`User ${notification.user_id} has disabled notifications of type '${notificationType}'. Skipping notification ${notification.id}.`)
+      // Update notification status to indicate skipped due to preference
+      await supabaseClient
+        .from('notifications')
+        .update({ push_sent_at: new Date().toISOString() }) // Mark as processed
+        .eq('id', notification.id)
+      return new Response('Notification skipped due to user preference', { status: 200 })
+    }
+
+    // 6. Validate the push token
+    const pushToken = profile.push_token
     if (!pushToken || typeof pushToken !== 'string' || !pushToken.startsWith('ExponentPushToken')) {
       console.error(`Invalid Expo push token format for user ${notification.user_id}: ${pushToken}`)
       // Optionally update notification status to 'invalid_token'
@@ -79,8 +111,8 @@ serve(async (req) => {
       return new Response('Invalid push token', { status: 400 })
     }
 
-    // 6. Construct the notification message
-    const messageGenerator = messageTemplates[notification.type as keyof typeof messageTemplates]
+    // 7. Construct the notification message
+    const messageGenerator = messageTemplates[notificationType] // Use already defined notificationType
     const messageBody = messageGenerator
       ? messageGenerator(notification.metadata)
       : 'You have a new notification.' // Fallback message
@@ -89,13 +121,13 @@ serve(async (req) => {
       to: pushToken,
       sound: 'default' as const, // Cast to literal type
       body: messageBody,
-      data: { notificationId: notification.id, type: notification.type, postId: notification.post_id, commentId: notification.comment_id }, // Include relevant IDs
+      data: { notificationId: notification.id, type: notificationType, postId: notification.post_id, commentId: notification.comment_id }, // Include relevant IDs
       // title: 'FacuChat', // Optional title
       // badge: 1, // Optional: Set badge count (requires client-side logic)
     }
 
-    // 7. Send the push notification
-    console.log(`Sending push notification to token: ${pushToken}`)
+    // 8. Send the push notification
+    console.log(`Sending push notification to token: ${pushToken} for type ${notificationType}`)
     try {
       // Use Deno's native fetch to call Expo API directly
       const expoApiUrl = 'https://exp.host/--/api/v2/push/send'
@@ -123,7 +155,7 @@ serve(async (req) => {
       console.log(`Expo API response for notification ${notification.id}:`, responseBody)
       const tickets = responseBody.data // Assuming success, 'data' contains ticket/receipt info
 
-      // 8. Update the notification status in the database
+      // 9. Update the notification status in the database
       const { error: updateError } = await supabaseClient
         .from('notifications')
         .update({ push_sent_at: new Date().toISOString() })

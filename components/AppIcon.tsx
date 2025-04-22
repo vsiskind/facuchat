@@ -33,6 +33,7 @@ export type IconName = // Add export keyword here
   | 'log-out'
   | 'menu'
   | 'star'
+  | 'notifications'
   // Icons used in SortDropdown
   | 'time' 
   | 'flame' 
