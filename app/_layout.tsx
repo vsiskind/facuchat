@@ -1,11 +1,16 @@
-import React, { useEffect, useState, createContext, useContext, useMemo } from 'react'; // Added createContext, useContext, useMemo
-import { Slot, Stack, SplashScreen, useRouter, useSegments } from 'expo-router'; // Import useSegments
+import React, { useEffect, useState, createContext, useContext, useMemo, useRef } from 'react'; // Added useRef
+import { Slot, Stack, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSupabaseAuth } from '../hooks/useSupabaseAuth';
-import { View, Text, StyleSheet, TouchableWithoutFeedback, Keyboard } from 'react-native'; // Import TouchableWithoutFeedback and Keyboard
+import { View, Text, StyleSheet, TouchableWithoutFeedback, Keyboard, Platform } from 'react-native'; // Import Platform
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+import { supabase } from '@/lib/supabase'; // Import Supabase client
+import { Subscription } from 'expo-notifications'; // Import Subscription type
 
 declare global {
   interface Window {
@@ -37,10 +42,118 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
   const router = useRouter();
   const segments = useSegments();
   const { session, loading: authLoading } = useSupabaseAuth();
-  const { hasCompletedOnboarding } = useOnboarding(); // Use context state
-  const onboardingChecked = hasCompletedOnboarding !== null; // Determine if checked based on context state
+  const { hasCompletedOnboarding } = useOnboarding();
+  const onboardingChecked = hasCompletedOnboarding !== null;
+  const notificationListener = useRef<Subscription>();
+  const responseListener = useRef<Subscription>();
 
-  // Effect to hide splash screen remains similar, depends on auth and onboarding check
+  // --- Push Notification Setup ---
+
+  async function registerForPushNotificationsAsync(): Promise<string | undefined> {
+    let token;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        // Consider alerting the user that they won't receive notifications
+        console.log('Failed to get push token for push notification!');
+        // alert('Failed to get push token for push notification!');
+        return;
+      }
+      // Learn more about projectId: https://docs.expo.dev/push-notifications/push-notifications-setup/#configure-projectid
+      // Note: Need to ensure EAS projectId is set in app.json -> extra -> eas -> projectId
+      try {
+        token = (await Notifications.getExpoPushTokenAsync({
+          projectId: Constants.expoConfig?.extra?.eas?.projectId,
+        })).data;
+        console.log('Expo Push Token:', token);
+      } catch (e) {
+        console.error("Error getting push token:", e);
+        // alert(`Error getting push token: ${e}`);
+      }
+    } else {
+      console.log('Must use physical device for Push Notifications');
+      // alert('Must use physical device for Push Notifications');
+    }
+
+    return token;
+  }
+
+  useEffect(() => {
+    if (session?.user) {
+      registerForPushNotificationsAsync().then(async (token) => {
+        if (token) {
+          // Get current token from profile
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('push_token')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = No rows found
+             console.error('Error fetching profile for push token:', profileError);
+             return;
+          }
+
+          // Update token if it's missing or different
+          if (!profileData?.push_token || profileData.push_token !== token) {
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ push_token: token })
+              .eq('id', session.user.id);
+
+            if (updateError) {
+              console.error('Error updating push token:', updateError);
+            }
+          }
+        }
+      });
+
+      // This listener is fired whenever a notification is received while the app is foregrounded
+      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+        console.log('Notification Received:', notification);
+        // You could potentially update a badge count here or show an in-app banner
+      });
+
+      // This listener is fired whenever a user taps on or interacts with a notification (works when app is foregrounded, backgrounded, or killed)
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        console.log('Notification Response Received:', response);
+        const { notificationId, type, postId, commentId } = response.notification.request.content.data as any;
+        // Navigate to the relevant content based on the data
+        // Example: if (type === 'reply_to_comment' && postId) router.push(`/posts/${postId}?highlightComment=${commentId}`);
+        // Add your navigation logic here
+      });
+
+      // Cleanup listeners on unmount
+      return () => {
+        if (notificationListener.current) {
+          Notifications.removeNotificationSubscription(notificationListener.current);
+        }
+        if (responseListener.current) {
+          Notifications.removeNotificationSubscription(responseListener.current);
+        }
+      };
+    }
+  }, [session]); // Re-run when session changes
+
+  // --- End Push Notification Setup ---
+
+
+  // Effect to hide splash screen
   useEffect(() => {
     if (authLoading === false && onboardingChecked) {
       SplashScreen.hideAsync();
@@ -50,7 +163,7 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
   // Add effect for handling navigation based on auth/onboarding state
   useEffect(() => {
     // Wait until loading is complete and router is ready
-    if (authLoading || !onboardingChecked || !router) {
+    if (authLoading || !onboardingChecked) { // Removed !router check as it might not be needed here
       return;
     }
 
@@ -87,9 +200,14 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
     } else if (session && session.user?.email_confirmed_at && needsOnboarding && currentGroup !== '(onboarding)') {
       // Redirect to onboarding if needed and not already there
       router.replace(targetRoute as any);
-    } else if (session && session.user?.email_confirmed_at && !needsOnboarding && currentGroup !== '(tabs)' && currentGroup !== 'settings' && segments[1] !== 'sign-up') { // Add check to prevent redirect from sign-up page during pre-check
-      // Redirect to main app tabs if authenticated, onboarded, and not already in tabs or settings AND NOT on sign-up page
-      router.replace(targetRoute as any);
+    } else if (session && session.user?.email_confirmed_at && !needsOnboarding && currentGroup !== '(tabs)' && currentGroup !== 'settings' && segments[1] !== 'sign-up') {
+      // Check if the current route is the reset password screen
+      const isOnResetPasswordScreen = currentGroup === 'auth' && segments.length > 1 && segments[1] === 'reset-password';
+
+      // Redirect to main app tabs ONLY if authenticated, onboarded, and NOT already in tabs/settings, NOT on sign-up, AND NOT on the reset password screen
+      if (!isOnResetPasswordScreen) {
+        router.replace(targetRoute as any);
+      }
     }
     // Dependency array now uses context state
   }, [router, segments, session, authLoading, onboardingChecked, hasCompletedOnboarding]);

@@ -11,7 +11,7 @@ import {
   Alert,
   ScrollView
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useGlobalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { AppIcon } from '../../components/AppIcon';
 
@@ -22,22 +22,62 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false); // Single state for both fields
+  const [isVerifying, setIsVerifying] = useState(false); // State for code exchange
 
-  // Note: Supabase handles the session automatically when the user arrives
-  // via the password reset link. We don't need to explicitly handle tokens here.
-  // The useLocalSearchParams might be useful if the link included extra params,
-  // but for Supabase's default flow, it's usually not needed for the reset itself.
-  // const { access_token, refresh_token, expires_in, token_type, type } = useLocalSearchParams();
+  // We need to capture the code from the URL params to exchange for a session
+  const params = useGlobalSearchParams(); // Use global search params for deep links
 
-  // useEffect(() => {
-  //   // You could potentially use params here if needed for analytics or specific flows
-  //   console.log("Reset Password Params:", useLocalSearchParams());
-  // }, []);
+  useEffect(() => {
+    const code = params.code as string | undefined;
 
+    if (code) {
+      const exchangeCode = async () => {
+        setIsVerifying(true);
+        setError(null);
+        try {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            // Handle specific errors like invalid code or expired link
+            if (exchangeError.message.includes("invalid") || exchangeError.message.includes("expired")) {
+               setError("The password reset link is invalid or has expired. Please request a new one.");
+            } else {
+               throw exchangeError; // Rethrow other errors
+            }
+            console.error("Code Exchange Error:", exchangeError);
+          } else {
+            // Session established successfully, user can now update password
+            console.log("Session established via code exchange.");
+          }
+        } catch (err: any) {
+          setError(err.message || 'Failed to verify password reset link.');
+          console.error("Code Exchange Exception:", err);
+        } finally {
+          setIsVerifying(false);
+        }
+      };
+      exchangeCode();
+    } else {
+       // Optional: Check if there's already a session? Usually not needed for reset flow.
+       // If no code, maybe show a message? Or rely on updateUser error.
+       console.log("No code found in params for password reset.");
+    }
+  }, [params.code]); // Re-run if the code param changes
+
+
+  // Note: Supabase requires exchanging the code from the reset link for a session
+  // before updateUser can be called successfully.
+  // The useGlobalSearchParams is used to get params from deep links.
   const handlePasswordReset = async () => {
     setError(null);
+
+    // Prevent update if code exchange is happening or failed implicitly
+    if (isVerifying) {
+        setError("Verifying reset link...");
+        return;
+    }
+    // Consider adding a check here if session is truly established if needed,
+    // but updateUser error handling should catch session issues.
 
     if (!password) {
       setError('New password is required');
@@ -62,11 +102,20 @@ export default function ResetPassword() {
         } else {
            throw updateError;
         }
-      } else {
-        // Password updated successfully
-        Alert.alert(
-          'Password Updated',
-          'Your password has been successfully reset. Please sign in again.',
+       } else {
+         // Password updated successfully
+         // Sign out the user *before* showing the alert and navigating
+         // This ensures the session is cleared, preventing immediate redirection back into the app
+         const { error: signOutError } = await supabase.auth.signOut();
+         if (signOutError) {
+           console.error("Error signing out after password reset:", signOutError);
+           // Optionally show a different message or handle the error
+           // For now, we'll proceed to the alert anyway
+         }
+
+         Alert.alert(
+           'Password Updated',
+           'Your password has been successfully reset. Please sign in again.',
           [{ text: 'OK', onPress: () => router.replace('/auth/sign-in') }] // Navigate to sign-in
         );
         // Clear fields
@@ -108,16 +157,16 @@ export default function ResetPassword() {
                 setPassword(text);
                 setError(null);
               }}
-              secureTextEntry={!showPassword}
+              secureTextEntry={!showPasswords} // Use single state
               placeholderTextColor="#999"
-              editable={!isLoading}
+              editable={!isLoading && !isVerifying} // Disable while verifying code
             />
              <Pressable
-              onPress={() => setShowPassword(!showPassword)}
+              onPress={() => setShowPasswords(!showPasswords)} // Toggle single state
               style={styles.eyeIcon}
             >
               <AppIcon
-                name={showPassword ? "eye-off" : "eye"}
+                name={showPasswords ? "eye-off" : "eye"} // Use single state
                 size={20}
                 color="#666"
                 outline={true}
@@ -136,32 +185,24 @@ export default function ResetPassword() {
                 setConfirmPassword(text);
                 setError(null);
               }}
-              secureTextEntry={!showConfirmPassword}
+              secureTextEntry={!showPasswords} // Use single state
               placeholderTextColor="#999"
-              editable={!isLoading}
+              editable={!isLoading && !isVerifying} // Disable while verifying code
             />
-             <Pressable
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              style={styles.eyeIcon}
-            >
-              <AppIcon
-                name={showConfirmPassword ? "eye-off" : "eye"}
-                size={20}
-                color="#666"
-                outline={true}
-              />
-            </Pressable>
+            {/* Remove the second eye icon Pressable */}
           </View>
 
           <Pressable
-            style={[styles.button, isLoading && styles.buttonDisabled]}
+            style={[styles.button, (isLoading || isVerifying) && styles.buttonDisabled]}
             onPress={handlePasswordReset}
-            disabled={isLoading}
+            disabled={isLoading || isVerifying} // Disable while loading or verifying
           >
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
+            ) : isVerifying ? (
+               <ActivityIndicator color="#FFFFFF" /> // Show indicator during code exchange too
             ) : (
-              <Text style={styles.buttonText}>Reset Password</Text>
+               <Text style={styles.buttonText}>Reset Password</Text>
             )}
           </Pressable>
         </View>
