@@ -105,8 +105,12 @@ DECLARE
   comment_count integer;
   parent_author_notify_pref boolean;
   post_author_notify_pref boolean;
-  author_to_reward_id uuid;
 BEGIN
+  -- Fetch the post author ID early, needed for both replies and direct comments
+  SELECT p.author_id INTO post_author_id
+  FROM public.posts p
+  WHERE p.id = NEW.post_id;
+
   -- 1. Handle Replies (Notification + Karma)
   IF NEW.parent_comment_id IS NOT NULL THEN
     SELECT c.author_id, pr.notify_reply_to_comment INTO parent_comment_author_id, parent_author_notify_pref
@@ -122,17 +126,23 @@ BEGIN
       );
     END IF;
 
-    -- Award karma for reply
+    -- Award karma for reply to parent comment author
     IF parent_comment_author_id IS NOT NULL AND parent_comment_author_id != NEW.author_id THEN
-       author_to_reward_id := parent_comment_author_id;
-       UPDATE public.profiles SET karma = karma + 1 WHERE id = author_to_reward_id;
+       UPDATE public.profiles SET karma = karma + 1 WHERE id = parent_comment_author_id;
+    END IF;
+
+    -- Award karma for reply to the original post author
+    IF post_author_id IS NOT NULL AND post_author_id != NEW.author_id THEN
+       UPDATE public.profiles SET karma = karma + 1 WHERE id = post_author_id;
     END IF;
 
   ELSE
     -- 2. Handle Direct Post Comments (Notification + Karma)
-    SELECT p.author_id, pr.notify_comment_milestone_post INTO post_author_id, post_author_notify_pref
-    FROM public.posts p JOIN public.profiles pr ON p.author_id = pr.id
-    WHERE p.id = NEW.post_id;
+    -- post_author_id is already fetched above
+    -- Fetch notification preference separately
+    SELECT pr.notify_comment_milestone_post INTO post_author_notify_pref
+    FROM public.profiles pr
+    WHERE pr.id = post_author_id; -- Assuming post_author_id is not null if we reach here
 
     -- Send notification if applicable
     IF post_author_id IS NOT NULL AND post_author_id != NEW.author_id AND post_author_notify_pref THEN
@@ -141,10 +151,9 @@ BEGIN
        VALUES (post_author_id, 'comment_milestone_post', NEW.post_id, NEW.author_id, jsonb_build_object('comments', comment_count));
     END IF;
 
-    -- Award karma for direct comment
+    -- Award karma for direct comment to the post author
     IF post_author_id IS NOT NULL AND post_author_id != NEW.author_id THEN
-        author_to_reward_id := post_author_id;
-        UPDATE public.profiles SET karma = karma + 1 WHERE id = author_to_reward_id;
+        UPDATE public.profiles SET karma = karma + 1 WHERE id = post_author_id;
     END IF;
   END IF;
 
