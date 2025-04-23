@@ -491,42 +491,7 @@ function CommentsFlyout({
 
         if (identityError) throw identityError;
 
-        // --- START KARMA LOGIC ---
-        // Determine who to reward
-        let authorToRewardId: string | undefined | null = null;
-        if (replyingTo) {
-          // It's a reply to a comment
-          // Find the parent comment in the post's comments list
-          const parentComment = post.comments.find(c => c.id === replyingTo);
-          authorToRewardId = parentComment?.author_id; 
-        } else {
-          // It's a direct comment on the post
-          authorToRewardId = post.author_id;
-        }
-
-        // Only proceed if we have a valid author ID and it's not the current user commenting on their own stuff
-        if (authorToRewardId && authorToRewardId !== user.id) {
-          // Use the RPC function to atomically update karma
-          const updateKarmaRpc = async () => {
-            try {
-              const { error: rpcError } = await supabase.rpc('increment_karma', {
-                user_id_to_update: authorToRewardId!, // Use non-null assertion
-              });
-
-              if (rpcError) {
-                console.error('Error calling increment_karma RPC:', rpcError);
-              } else {
-                // Optional: Log success or perform other actions after successful update
-                console.log(`Karma increment RPC called for user ${authorToRewardId}`);
-              }
-            } catch (rpcCatchError) {
-              console.error('Unexpected error calling increment_karma RPC:', rpcCatchError);
-            }
-          };
-          // Fire and forget the karma update RPC (don't await it here)
-          updateKarmaRpc();
-        }
-        // --- END KARMA LOGIC ---
+        // Karma logic is now handled by backend triggers
       }
 
       setCommentText('');
