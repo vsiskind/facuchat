@@ -228,40 +228,14 @@ export default function ProfileScreen() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [rawComments, setRawComments] = useState<Comment[]>([]);
   
-  // Karma state
-  const [karma, setKarma] = useState(0);
-  
+  // Profile state (will include karma)
+  const [profileData, setProfileData] = useState<{ username: string | null, avatar_url: string | null, karma: number } | null>(null);
+
   // Shared state
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedSort, setSelectedSort] = useState<SortOption>(sortOptions[0]);
-
-  // Calculate karma from posts and comments
-  const calculateKarma = useCallback(() => {
-    // Calculate karma from posts
-    const postKarma = rawPosts.reduce((total, post) => {
-      const upvotes = post.votes?.filter(vote => vote.vote_type === 'up').length || 0;
-      const downvotes = post.votes?.filter(vote => vote.vote_type === 'down').length || 0;
-      return total + upvotes - downvotes;
-    }, 0);
-
-    // Calculate karma from comments
-    const commentKarma = rawComments.reduce((total, comment) => {
-      const upvotes = comment.comment_votes?.filter(vote => vote.vote_type === 'up').length || 0;
-      const downvotes = comment.comment_votes?.filter(vote => vote.vote_type === 'down').length || 0;
-      return total + upvotes - downvotes;
-    }, 0);
-
-    // Total karma
-    return postKarma + commentKarma;
-  }, [rawPosts, rawComments]);
-
-  // Update karma whenever posts or comments change
-  useEffect(() => {
-    const newKarma = calculateKarma();
-    setKarma(newKarma);
-  }, [rawPosts, rawComments, calculateKarma]);
 
   const sortedPosts = useMemo(() => {
     return [...rawPosts].sort((a, b) => {
@@ -399,12 +373,34 @@ export default function ProfileScreen() {
     }
   }
 
+  async function fetchUserProfile() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('username, avatar_url, karma') // Fetch karma here
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      setProfileData(data);
+    } catch (err: any) {
+      setError(err.message); // Set error state if profile fetch fails
+      console.error('Error fetching user profile:', err);
+    }
+  }
+
   async function fetchUserData() {
     setLoading(true);
+    setError(null); // Reset error before fetching
     try {
+      // Fetch profile, posts, and comments concurrently
       await Promise.all([
+        fetchUserProfile(),
         fetchUserPosts(),
-        fetchUserComments()
+        fetchUserComments(),
       ]);
     } catch (err) {
       console.error('Error fetching user data:', err);
@@ -528,7 +524,7 @@ export default function ProfileScreen() {
         <View style={profileStyles.karmaContainer}>
           <AppIcon name="star" size={18} color="#F3E8FF" outline={true} />
           <Text style={profileStyles.karmaText}>
-            {karma} karma points
+            {profileData?.karma ?? 0} karma points
           </Text>
         </View>
       </View>

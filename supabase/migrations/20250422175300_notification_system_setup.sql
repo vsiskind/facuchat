@@ -169,12 +169,12 @@ BEGIN
 
     -- Insert notification for the parent comment author, if they are not the one replying
     IF parent_comment_author_id IS NOT NULL AND parent_comment_author_id != NEW.author_id THEN
-      INSERT INTO public.notifications (user_id, type, comment_id, post_id, triggering_user_id, metadata)
+      -- Removed post_id from insert to comply with chk_notification_target constraint
+      INSERT INTO public.notifications (user_id, type, comment_id, triggering_user_id, metadata)
       VALUES (
         parent_comment_author_id,
         'reply_to_comment',
         NEW.parent_comment_id, -- The comment being replied to
-        NEW.post_id,           -- Context: the post the comment belongs to
         NEW.author_id,         -- User who made the reply
         jsonb_build_object('parent_comment_id', NEW.parent_comment_id, 'reply_id', NEW.id)
       );

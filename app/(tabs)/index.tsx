@@ -63,11 +63,15 @@ type Comment = BaseComment & {
   replies?: Comment[];
 };
 
-// Define Post using the Comment type
+// Type for raw comment data from Supabase (without client-side replies)
+type RawComment = Omit<BaseComment, 'replies'>;
+
+// Define Post using the Comment type (for components after processing)
 type Post = {
   id: string;
   content: string;
   created_at: string;
+  author_id: string; // <-- Add author_id here
   post_identities: {
     username: string;
     avatar_url: string;
@@ -79,6 +83,12 @@ type Post = {
   }[];
   comments: Comment[]; // Use the defined Comment type
 };
+
+// Type for raw post data from Supabase
+type RawPost = Omit<Post, 'comments'> & {
+  comments: RawComment[]; // Use RawComment for fetched data
+};
+
 
 function Comment({
   comment,
@@ -480,6 +490,43 @@ function CommentsFlyout({
           }]);
 
         if (identityError) throw identityError;
+
+        // --- START KARMA LOGIC ---
+        // Determine who to reward
+        let authorToRewardId: string | undefined | null = null;
+        if (replyingTo) {
+          // It's a reply to a comment
+          // Find the parent comment in the post's comments list
+          const parentComment = post.comments.find(c => c.id === replyingTo);
+          authorToRewardId = parentComment?.author_id; 
+        } else {
+          // It's a direct comment on the post
+          authorToRewardId = post.author_id;
+        }
+
+        // Only proceed if we have a valid author ID and it's not the current user commenting on their own stuff
+        if (authorToRewardId && authorToRewardId !== user.id) {
+          // Use the RPC function to atomically update karma
+          const updateKarmaRpc = async () => {
+            try {
+              const { error: rpcError } = await supabase.rpc('increment_karma', {
+                user_id_to_update: authorToRewardId!, // Use non-null assertion
+              });
+
+              if (rpcError) {
+                console.error('Error calling increment_karma RPC:', rpcError);
+              } else {
+                // Optional: Log success or perform other actions after successful update
+                console.log(`Karma increment RPC called for user ${authorToRewardId}`);
+              }
+            } catch (rpcCatchError) {
+              console.error('Unexpected error calling increment_karma RPC:', rpcCatchError);
+            }
+          };
+          // Fire and forget the karma update RPC (don't await it here)
+          updateKarmaRpc();
+        }
+        // --- END KARMA LOGIC ---
       }
 
       setCommentText('');
@@ -759,7 +806,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedSort, setSelectedSort] = useState<SortOption>(sortOptions[0]);
-  const [rawPosts, setRawPosts] = useState<Post[]>([]);
+  const [rawPosts, setRawPosts] = useState<RawPost[]>([]); // Use RawPost[] for state
   const params = useLocalSearchParams<{ postId?: string; commentId?: string }>(); // Get params
   const flatListRef = useRef<FlatList>(null); // Add FlatList ref
 
@@ -772,6 +819,7 @@ export default function HomeScreen() {
         .from('posts')
         .select(`
           *,
+          author_id, 
           post_identities (*),
           votes (*),
           comments (
@@ -786,11 +834,15 @@ export default function HomeScreen() {
           )
         `);
 
-      const { data, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-      setRawPosts(data as Post[]);
-    } catch (err: any) {
-      console.error('Error fetching posts:', err);
+    const { data, error: fetchError } = await query;
+    if (fetchError) throw fetchError;
+    if (data) { // Add null check
+      setRawPosts(data); // Remove 'as Post[]'
+    } else {
+      setRawPosts([]); // Handle null case
+    }
+  } catch (err: any) {
+    console.error('Error fetching posts:', err);
       setError(err.message || 'Failed to fetch posts');
     } finally {
       setLoading(false);

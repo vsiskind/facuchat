@@ -15,8 +15,6 @@ const messageTemplates = {
 }
 
 serve(async (req) => {
-  console.log('--- send-push-notifications function invoked ---'); // ADDED VERY FIRST LOG
-
   // 1. Check method and authorization (basic check, enhance as needed)
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 })
@@ -35,13 +33,10 @@ serve(async (req) => {
 
     // Check if it's an INSERT event on the notifications table
     if (payload.type !== 'INSERT' || payload.table !== 'notifications') {
-      console.log('Ignoring non-notification insert event:', payload.type, payload.table)
       return new Response('Ignoring event', { status: 200 })
     }
 
     const notification = payload.record // The newly inserted notification row
-    console.log('Processing notification:', notification.id)
-
     // 4. Fetch the recipient's push token and notification preferences
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
@@ -90,7 +85,6 @@ serve(async (req) => {
     }
 
     if (!shouldSend) {
-      console.log(`User ${notification.user_id} has disabled notifications of type '${notificationType}'. Skipping notification ${notification.id}.`)
       // Update notification status to indicate skipped due to preference
       await supabaseClient
         .from('notifications')
@@ -127,7 +121,6 @@ serve(async (req) => {
     }
 
     // 8. Send the push notification
-    console.log(`Sending push notification to token: ${pushToken} for type ${notificationType}`)
     try {
       // Use Deno's native fetch to call Expo API directly
       const expoApiUrl = 'https://exp.host/--/api/v2/push/send'
@@ -152,7 +145,6 @@ serve(async (req) => {
         return new Response('Error sending push notification via Expo API', { status: response.status })
       }
 
-      console.log(`Expo API response for notification ${notification.id}:`, responseBody)
       const tickets = responseBody.data // Assuming success, 'data' contains ticket/receipt info
 
       // 9. Update the notification status in the database
@@ -166,7 +158,6 @@ serve(async (req) => {
         // Don't return error response here, as push might have succeeded
       }
 
-      console.log(`Successfully processed and sent notification ${notification.id}`)
       return new Response(JSON.stringify({ success: true, tickets }), {
         headers: { 'Content-Type': 'application/json' },
         status: 200,
