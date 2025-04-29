@@ -2,24 +2,19 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 // Removed AsyncStorage import
+// Removed useOnboarding import
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '@/components/AppIcon'; // Assuming AppIcon is reusable
-import { useOnboarding } from '@/app/_layout'; // Import the context hook
 
 const ACCENT_COLOR = '#7C3AED'; // Use consistent accent color
 
 export default function WelcomeOnboardingScreen() {
   const router = useRouter();
-  const { completeOnboarding } = useOnboarding(); // Get the function from context
+  // Removed completeOnboarding call
 
-  const handleGetStarted = async () => {
-    try {
-      await completeOnboarding(); // Call the context function
-      router.replace('/(tabs)'); // Navigate to the main tab navigator
-    } catch (error) {
-      console.error('Failed to complete onboarding or navigate:', error);
-      // Optionally show an error message to the user
-    }
+  const handleGetStarted = () => { // Made function synchronous
+    // Navigate to the school selection screen (index of the onboarding group)
+    router.push('/(onboarding)'); 
   };
 
   return (

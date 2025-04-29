@@ -42,7 +42,8 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
   const router = useRouter();
   const segments = useSegments();
   const { session, loading: authLoading } = useSupabaseAuth();
-  const { hasCompletedOnboarding } = useOnboarding();
+  // Destructure completeOnboarding from the context hook
+  const { hasCompletedOnboarding, completeOnboarding } = useOnboarding(); 
   const onboardingChecked = hasCompletedOnboarding !== null;
   const notificationListener = useRef<Subscription>();
   const responseListener = useRef<Subscription>();
@@ -173,42 +174,54 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
     }
 
     const needsOnboarding = hasCompletedOnboarding === false; // Use context state here
-    // Determine the target route
-    let targetRoute: string;
-    if (!session) {
-      targetRoute = '/auth';
-    } else if (!session.user?.email_confirmed_at) {
-      // Redirect to verify screen if email not confirmed
-      // Ensure email is passed as param if possible
-      targetRoute = `/auth/verify?email=${session.user.email || ''}`; 
-    } else if (needsOnboarding) {
-      targetRoute = '/(onboarding)/welcome'; // Direct to the new welcome screen
-    } else {
-      targetRoute = '/(tabs)';
+    const isAuthGroup = segments[0] === 'auth';
+    const isOnboardingGroup = segments[0] === '(onboarding)';
+    const isTabsGroup = segments[0] === '(tabs)';
+    const isSettingsGroup = segments[0] === 'settings';
+    const isOnResetPasswordScreen = isAuthGroup && segments.length > 1 && segments[1] === 'reset-password';
+
+    // --- New Redirect Logic ---
+    // Priority 1: Onboarding Flow
+    if (needsOnboarding) {
+      // If user needs onboarding and isn't already in the onboarding or auth flow, start it.
+      if (!isOnboardingGroup && !isAuthGroup) {
+        router.replace('/(onboarding)/welcome');
+        return;
+      }
+      // If user is authenticated & verified BUT still marked as needing onboarding,
+      // it means they just completed the auth part of onboarding.
+      // Mark onboarding complete and redirect to the main app.
+      if (session && session.user?.email_confirmed_at) {
+        completeOnboarding().then(() => {
+          router.replace('/(tabs)');
+        });
+        return; // Prevent further checks after initiating async completion/redirect
+      }
+      // Otherwise, let them proceed through the onboarding/auth screens they are currently on.
+      return;
     }
 
-    // Cast currentGroup to string to potentially bypass strict type checking issues
-    const currentGroup = segments[0] as string; 
-
-    // Redirect logic based on auth state and current location
-    // Allow navigation to onboarding even without session
-    if (!session && currentGroup !== 'auth' && currentGroup !== '(onboarding)') { 
-      router.replace(targetRoute as any);
-    } else if (session && !session.user?.email_confirmed_at && currentGroup !== 'auth') {
-      // Redirect to verify if email not confirmed and not already in auth group
-      router.replace(targetRoute as any);
-    } else if (session && session.user?.email_confirmed_at && needsOnboarding && currentGroup !== '(onboarding)') {
-      // Redirect to onboarding if needed and not already there
-      router.replace(targetRoute as any);
-    } else if (session && session.user?.email_confirmed_at && !needsOnboarding && currentGroup !== '(tabs)' && currentGroup !== 'settings' && segments[1] !== 'sign-up') {
-      // Check if the current route is the reset password screen
-      const isOnResetPasswordScreen = currentGroup === 'auth' && segments.length > 1 && segments[1] === 'reset-password';
-
-      // Redirect to main app tabs ONLY if authenticated, onboarded, and NOT already in tabs/settings, NOT on sign-up, AND NOT on the reset password screen
-      if (!isOnResetPasswordScreen) {
-        router.replace(targetRoute as any);
+    // Priority 2: Post-Onboarding Authentication & Main App Access
+    if (!needsOnboarding) {
+      // If not authenticated and not in auth or onboarding group, go to auth.
+      // Allows navigating to onboarding (e.g., school select for sign-up) even if logged out.
+      if (!session && !isAuthGroup && !isOnboardingGroup) {
+        router.replace('/auth');
+        return;
+      }
+      // If authenticated but email not verified, and not in auth group, go to verify.
+      if (session && !session.user?.email_confirmed_at && !isAuthGroup) {
+        router.replace(`/auth/verify?email=${session.user.email || ''}`);
+        return;
+      }
+      // If authenticated, verified, and onboarded, but not in tabs/settings (and not resetting password), go to tabs.
+      if (session && session.user?.email_confirmed_at && !isTabsGroup && !isSettingsGroup && !isOnResetPasswordScreen) {
+        router.replace('/(tabs)');
+        return;
       }
     }
+    // --- End New Redirect Logic ---
+
     // Dependency array now uses context state
   }, [router, segments, session, authLoading, onboardingChecked, hasCompletedOnboarding]);
 
@@ -256,8 +269,10 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
           options={{ 
             headerShown: false,
             gestureEnabled: false // Disable gesture for the entire auth stack group
-          }} 
+          }}
         />
+        {/* Add the onboarding stack */}
+        <Stack.Screen name="(onboarding)" /> 
           <Stack.Screen name="+not-found" />
         </Stack>
       </TouchableWithoutFeedback>
