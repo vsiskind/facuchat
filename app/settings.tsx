@@ -181,6 +181,18 @@ export default function SettingsScreen() {
 
           <View style={styles.divider} />
 
+          {/* Suggestions Row */}
+          <Pressable
+            style={styles.settingRow}
+            onPress={() => router.push('/settings/suggestions')}
+          >
+            <AppIcon name="chatbubble-ellipses" size={22} color={ACCENT_COLOR} outline={true} />
+            <Text style={styles.settingText}>Suggestions</Text>
+            <AppIcon name="chevron-forward" size={20} color="#666" outline={true} />
+          </Pressable>
+
+          <View style={styles.divider} />
+
           <Pressable
             style={styles.settingRow}
             onPress={handleSignOut}
