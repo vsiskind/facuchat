@@ -5,6 +5,7 @@ node_modules/
 /.bolt
 
 # expo
+.expo/
 /.expo
 dist/
 web-build/
