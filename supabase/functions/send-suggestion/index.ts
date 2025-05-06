@@ -39,7 +39,7 @@ serve(async (req: Request) => {
       to: [TO_EMAIL_ADDRESS],
       subject: 'New App Suggestion',
       html: `
-        <h1>New Suggestion Received</h1>
+        <h1>New Suggestion Received</h1>\
         <p><strong>Suggestion:</strong></p>
         <p>${suggestionText}</p>
       `,

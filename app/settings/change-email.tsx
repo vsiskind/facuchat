@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 16,
-    paddingTop: Platform.OS === 'web' ? 16 : 60, // Use platform-aware padding
+    paddingTop: 60, // Use platform-aware padding
     backgroundColor: HEADER_BG_COLOR,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',

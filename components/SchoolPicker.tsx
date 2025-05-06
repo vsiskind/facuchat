@@ -42,19 +42,6 @@ export function SchoolPicker({
   // Find the label for the currently selected school value
   const selectedLabel = options.find(option => option.value === selectedSchool)?.label || placeholder;
 
-  // Close dropdown when clicking outside (Web only)
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (dropdownRef.current && !(dropdownRef.current as any).contains(event.target)) {
-          setIsOpen(false);
-        }
-      };
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, []);
-
   return (
     <View ref={dropdownRef} style={styles.container}>
       <Pressable

@@ -32,34 +32,16 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: '#ffffff',
-          ...Platform.select({
-            ios: {
-              height: 84,
-              paddingBottom: 30,
-              paddingTop: 12,
-            },
-            android: {
-              height: 64,
-              paddingBottom: 12,
-              paddingTop: 8,
-            },
-            web: {
-              height: 64,
-              paddingBottom: 12,
-              paddingTop: 8,
-            },
-          }),
+          height: 84,
+          paddingBottom: 30,
+          paddingTop: 12,
           borderTopWidth: 1,
           borderTopColor: 'rgba(0,0,0,0.1)',
         },
         tabBarActiveTintColor: ACCENT_COLOR,
         tabBarInactiveTintColor: '#94A3B8',
         tabBarIconStyle: {
-          ...Platform.select({
-            ios: {
-              marginBottom: 0,
-            },
-          }),
+          marginBottom: 0,
         },
       }}>
       <Tabs.Screen

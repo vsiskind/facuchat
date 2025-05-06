@@ -33,9 +33,7 @@ export function useSupabaseAuth() {
         }
       } catch (error) {
         console.error('Error getting session:', error);
-        if (Platform.OS !== 'web') {
-          Alert.alert('Error', 'Failed to get authentication session');
-        }
+        Alert.alert('Error', 'Failed to get authentication session');
       } finally {
         setLoading(false);
       }
@@ -180,11 +178,8 @@ export function useSupabaseAuth() {
       // Generate profile data
       const username = generateRandomUsername();
       const avatarUrl = getRandomAvatarUrl();
-      const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback`
-        : undefined;
       const options: any = {
-        emailRedirectTo: redirectTo,
+        emailRedirectTo: undefined,
         data: { requested_username: username, requested_avatar: avatarUrl }
       };
 
@@ -345,10 +340,7 @@ export function useSupabaseAuth() {
         };
       }
 
-      // Determine the redirectTo URL based on platform
-      const redirectTo = Platform.OS === 'web' && typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback`
-        : undefined;
+      const redirectTo = undefined;
 
       const { error } = await supabase.auth.resend({
         type: 'signup',

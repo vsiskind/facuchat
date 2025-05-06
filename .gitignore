@@ -6,10 +6,10 @@ node_modules/
 
 # expo
 .expo/
-/.expo
 dist/
 web-build/
 expo-env.d.ts
+devices.json
 
 # native
 *.orig.*
@@ -36,3 +36,6 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# memory bank
+memory-bank/

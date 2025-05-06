@@ -49,11 +49,6 @@ interface AppIconProps {
 export function AppIcon({ name, size = 24, color = '#000', outline = true }: AppIconProps) {
   // Determine the correct icon name based on platform and outline preference
   const getIconName = () => {
-    // For web, we can use the outline or filled versions directly
-    if (Platform.OS === 'web') {
-      return outline ? `${name}-outline` : name;
-    }
-    
     // For mobile, ensure we're using the correct naming convention
     // Some icons might need special handling on mobile
     return outline ? `${name}-outline` : name;

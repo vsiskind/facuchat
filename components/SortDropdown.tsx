@@ -34,20 +34,6 @@ export function SortDropdown({ options, selectedOption, onSelect }: SortDropdown
     };
   });
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (dropdownRef.current && !(dropdownRef.current as any).contains(event.target)) {
-          setIsOpen(false);
-        }
-      };
-
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, []);
-
   return (
     <View ref={dropdownRef} style={styles.container}>
       <Pressable
@@ -152,11 +138,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 5,
-    ...Platform.select({
-      web: {
-        minWidth: 280,
-      },
-    }),
   },
   // Added inner view for padding to avoid animating padding
   dropdownContent: {
