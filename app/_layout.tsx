@@ -1,6 +1,13 @@
 import React, { useEffect, useState, createContext, useContext, useMemo, useRef } from 'react'; // Added useRef
 import { Slot, Stack, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts, 
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold 
+} from '@expo-google-fonts/inter';
+import { GochiHand_400Regular } from '@expo-google-fonts/gochi-hand';
 import { useSupabaseAuth } from '../hooks/useSupabaseAuth';
 import { View, Text, StyleSheet, TouchableWithoutFeedback, Keyboard, Platform } from 'react-native'; // Import Platform
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -42,6 +49,13 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
   const router = useRouter();
   const segments = useSegments();
   const { session, loading: authLoading } = useSupabaseAuth();
+  const [fontsLoaded, fontError] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    GochiHand_400Regular,
+  }); // Load fonts
   // Destructure completeOnboarding from the context hook
   const { hasCompletedOnboarding, completeOnboarding } = useOnboarding(); 
   const onboardingChecked = hasCompletedOnboarding !== null;
@@ -156,15 +170,15 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
 
   // Effect to hide splash screen
   useEffect(() => {
-    if (authLoading === false && onboardingChecked) {
+    if (authLoading === false && onboardingChecked && (fontsLoaded || fontError)) {
       SplashScreen.hideAsync();
     }
-  }, [authLoading, onboardingChecked]);
+  }, [authLoading, onboardingChecked, fontsLoaded, fontError]);
 
   // Add effect for handling navigation based on auth/onboarding state
   useEffect(() => {
-    // Wait until loading is complete and router is ready
-    if (authLoading || !onboardingChecked) { // Removed !router check as it might not be needed here
+    // Wait until loading is complete, fonts are loaded/error, and router is ready
+    if (authLoading || !onboardingChecked || (!fontsLoaded && !fontError)) {
       return;
     }
 
@@ -229,8 +243,8 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
   // Check for Supabase environment variables
   const missingEnvVars = !process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Show loading state while auth is loading OR onboarding status is null (not yet checked)
-  if (authLoading || !onboardingChecked) {
+  // Show loading state while auth is loading OR onboarding status is null (not yet checked) OR fonts are not loaded/errored
+  if (authLoading || !onboardingChecked || (!fontsLoaded && !fontError)) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={styles.loadingContainer}>
