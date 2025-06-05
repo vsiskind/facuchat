@@ -257,24 +257,26 @@ function RootLayoutNav() { // Renamed component to RootLayoutNav
   // Render the stack navigator. Navigation is handled by the useEffect hook.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* Wrap the Stack with TouchableWithoutFeedback */}
+      {/* Wrap the Stack with TouchableWithoutFeedback and add a View in between */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="(tabs)"
-          options={{ gestureEnabled: false }} // Disable swipe back from tabs
-        />
-        <Stack.Screen
-          name="auth" // Includes /auth and /auth/verify
-          options={{ 
-            headerShown: false,
-            gestureEnabled: false // Disable gesture for the entire auth stack group
-          }}
-        />
-        {/* Add the onboarding stack */}
-        <Stack.Screen name="(onboarding)" /> 
-          <Stack.Screen name="+not-found" />
-        </Stack>
+        <View style={{ flex: 1 }}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen
+              name="(tabs)"
+              options={{ gestureEnabled: false }} // Disable swipe back from tabs
+            />
+            <Stack.Screen
+              name="auth" // Includes /auth and /auth/verify
+              options={{ 
+                headerShown: false,
+                gestureEnabled: false // Disable gesture for the entire auth stack group
+              }}
+            />
+            {/* Add the onboarding stack */}
+            <Stack.Screen name="(onboarding)" /> 
+            <Stack.Screen name="+not-found" />
+          </Stack>
+        </View>
       </TouchableWithoutFeedback>
       <StatusBar style="auto" />
     </GestureHandlerRootView>
