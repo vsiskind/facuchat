@@ -13,8 +13,8 @@ export default function WelcomeOnboardingScreen() {
   // Removed completeOnboarding call
 
   const handleGetStarted = () => { // Made function synchronous
-    // Navigate to the school selection screen (index of the onboarding group)
-    router.push('/(onboarding)'); 
+    // Navigate to the carousel screen instead of school selection
+    router.push('/(onboarding)/carousel'); 
   };
 
   return (
