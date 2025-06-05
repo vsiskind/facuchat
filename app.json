@@ -16,8 +16,7 @@
       }
     },
     "plugins": [
-      "expo-router",
-      "expo-font"
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -31,9 +30,6 @@
         "projectId": "45c467ae-a908-4075-aee7-e39117e101fc"
       }
     },
-    "owner": "vsiskind",
-    "android": {
-      "package": "com.vsiskind.facuchat"
-    }
+    "owner": "vsiskind"
   }
 }
